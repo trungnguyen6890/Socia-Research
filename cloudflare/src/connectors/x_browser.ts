@@ -42,10 +42,15 @@ export class XBrowserConnector extends BaseConnector {
     }
 
     // auto: try nitter first, fallback to direct x.com
+    // But do NOT fallback if the error is a CF Browser Rendering rate limit —
+    // the Direct strategy would also fail immediately with the same 429.
     try {
       return await this.fetchViaNitter(username, sinceCursor, includeRetweets);
     } catch (nitterErr) {
       const nitterMsg = nitterErr instanceof Error ? nitterErr.message : String(nitterErr);
+      if (nitterMsg.includes('Rate limit exceeded') || nitterMsg.includes('code: 429')) {
+        throw new Error(`Browser Rendering rate limited — skipping Direct fallback. ${nitterMsg}`);
+      }
       try {
         return await this.fetchDirectX(username, sinceCursor, includeRetweets);
       } catch (directErr) {
@@ -72,68 +77,61 @@ export class XBrowserConnector extends BaseConnector {
       ? [preferred, ...XBrowserConnector.NITTER_INSTANCES.filter(i => i !== preferred)]
       : XBrowserConnector.NITTER_INSTANCES;
 
-    let lastError = '';
-    for (const inst of instances) {
-      try {
-        return await this.tryNitterInstance(username, inst, sinceCursor, includeRetweets);
-      } catch (err) {
-        lastError = err instanceof Error ? err.message : String(err);
-      }
-    }
-    throw new Error(`All Nitter instances failed: ${lastError}`);
-  }
-
-  private async tryNitterInstance(
-    username: string,
-    instance: string,
-    sinceCursor: string | null,
-    includeRetweets: boolean,
-  ): Promise<FetchResult> {
-    const url = `${instance}/${username}`;
+    // Open ONE browser and reuse it across all Nitter instance attempts
     const browser = await puppeteer.launch(this.env.BROWSER);
-
     try {
       const page = await browser.newPage();
       await page.setUserAgent(
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
       );
 
-      const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 25000 });
-      if (!response || response.status() >= 400) {
-        throw new Error(`${instance} HTTP ${response?.status() ?? 'no response'}`);
+      let lastError = '';
+      for (const inst of instances) {
+        try {
+          const url = `${inst}/${username}`;
+          const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 25000 });
+          if (!response || response.status() >= 400) {
+            lastError = `${inst} HTTP ${response?.status() ?? 'no response'}`;
+            continue;
+          }
+
+          await page.waitForSelector('.timeline-item, .error-panel, .timeline-none', { timeout: 10000 }).catch(() => {});
+
+          const pageInfo = await page.evaluate(() => ({
+            errorText: document.querySelector('.error-panel')?.textContent?.trim() ?? '',
+            hasError: !!document.querySelector('.error-panel'),
+            itemCount: document.querySelectorAll('.timeline-item').length,
+            bodySnippet: document.body?.innerText?.slice(0, 300) ?? '',
+          }));
+
+          if (pageInfo.hasError) { lastError = `${inst} error: ${pageInfo.errorText.slice(0, 150)}`; continue; }
+          if (pageInfo.itemCount === 0) { lastError = `${inst}: 0 items. Body: ${pageInfo.bodySnippet.slice(0, 150)}`; continue; }
+
+          const tweets = await page.evaluate((includeRT: boolean) => {
+            const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
+            document.querySelectorAll('.timeline-item').forEach((el) => {
+              const isRetweet = !!el.querySelector('.retweet-header');
+              if (!includeRT && isRetweet) return;
+              const href = el.querySelector('.tweet-link')?.getAttribute('href') ?? '';
+              const m = href.match(/\/status\/(\d+)/);
+              if (!m) return;
+              const text = el.querySelector('.tweet-content, .tweet-body .media-body')?.textContent?.trim() ?? '';
+              const date = (el.querySelector('.tweet-date a') as HTMLAnchorElement)?.getAttribute('title') ?? '';
+              const stats = el.querySelectorAll('.tweet-stat');
+              const parseNum = (i: number) => parseInt(stats[i]?.textContent?.replace(/,/g, '').match(/\d+/)?.[0] ?? '0', 10);
+              items.push({ id: m[1], text, date, isRetweet, replies: parseNum(0), retweets: parseNum(1), likes: parseNum(2) });
+            });
+            return items;
+          }, includeRetweets);
+
+          return this.convertTweets(tweets, username, sinceCursor);
+        } catch (err) {
+          lastError = err instanceof Error ? err.message : String(err);
+          // If this is a browser infrastructure error (rate limit etc), stop trying more instances
+          if (lastError.includes('Rate limit exceeded') || lastError.includes('code: 429')) break;
+        }
       }
-
-      await page.waitForSelector('.timeline-item, .error-panel, .timeline-none', { timeout: 10000 }).catch(() => {});
-
-      const pageInfo = await page.evaluate(() => ({
-        errorText: document.querySelector('.error-panel')?.textContent?.trim() ?? '',
-        hasError: !!document.querySelector('.error-panel'),
-        hasNone: !!document.querySelector('.timeline-none'),
-        itemCount: document.querySelectorAll('.timeline-item').length,
-        bodySnippet: document.body?.innerText?.slice(0, 300) ?? '',
-      }));
-
-      if (pageInfo.hasError) throw new Error(`${instance} error: ${pageInfo.errorText.slice(0, 150)}`);
-      if (pageInfo.itemCount === 0) throw new Error(`${instance}: 0 timeline items. Body: ${pageInfo.bodySnippet.slice(0, 150)}`);
-
-      const tweets = await page.evaluate((includeRT: boolean) => {
-        const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
-        document.querySelectorAll('.timeline-item').forEach((el) => {
-          const isRetweet = !!el.querySelector('.retweet-header');
-          if (!includeRT && isRetweet) return;
-          const href = el.querySelector('.tweet-link')?.getAttribute('href') ?? '';
-          const m = href.match(/\/status\/(\d+)/);
-          if (!m) return;
-          const text = el.querySelector('.tweet-content, .tweet-body .media-body')?.textContent?.trim() ?? '';
-          const date = (el.querySelector('.tweet-date a') as HTMLAnchorElement)?.getAttribute('title') ?? '';
-          const stats = el.querySelectorAll('.tweet-stat');
-          const parseNum = (i: number) => parseInt(stats[i]?.textContent?.replace(/,/g, '').match(/\d+/)?.[0] ?? '0', 10);
-          items.push({ id: m[1], text, date, isRetweet, replies: parseNum(0), retweets: parseNum(1), likes: parseNum(2) });
-        });
-        return items;
-      }, includeRetweets);
-
-      return this.convertTweets(tweets, username, sinceCursor);
+      throw new Error(`All Nitter instances failed: ${lastError}`);
     } finally {
       await browser.close();
     }
