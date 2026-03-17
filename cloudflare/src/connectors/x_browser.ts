@@ -34,29 +34,32 @@ export class XBrowserConnector extends BaseConnector {
     const includeRetweets = Boolean(this.config.include_retweets ?? false);
     const strategy = (this.config.strategy as string) ?? 'auto';
 
-    if (strategy === 'nitter') {
-      return this.fetchViaNitter(username, sinceCursor, includeRetweets);
-    }
-    if (strategy === 'direct') {
-      return this.fetchDirectX(username, sinceCursor, includeRetweets);
-    }
-
-    // auto: try nitter first, fallback to direct x.com
-    // But do NOT fallback if the error is a CF Browser Rendering rate limit —
-    // the Direct strategy would also fail immediately with the same 429.
+    // All strategies share ONE browser session to avoid CF Browser Rendering rate limits.
+    // Opening multiple browsers per source is the primary cause of 429 errors.
+    const browser = await puppeteer.launch(this.env.BROWSER);
     try {
-      return await this.fetchViaNitter(username, sinceCursor, includeRetweets);
-    } catch (nitterErr) {
-      const nitterMsg = nitterErr instanceof Error ? nitterErr.message : String(nitterErr);
-      if (nitterMsg.includes('Rate limit exceeded') || nitterMsg.includes('code: 429')) {
-        throw new Error(`Browser Rendering rate limited — skipping Direct fallback. ${nitterMsg}`);
+      const page = await browser.newPage();
+      await page.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      );
+      await page.setViewport({ width: 1280, height: 900 });
+
+      if (strategy === 'direct') {
+        return await this.scrapeDirectX(page, username, sinceCursor, includeRetweets);
       }
-      try {
-        return await this.fetchDirectX(username, sinceCursor, includeRetweets);
-      } catch (directErr) {
-        const directMsg = directErr instanceof Error ? directErr.message : String(directErr);
-        throw new Error(`All strategies failed for @${username}. Nitter: ${nitterMsg}. Direct: ${directMsg}`);
+
+      // auto or nitter: try Nitter instances first, then fallback to x.com
+      const nitterResult = await this.tryNitterInstances(page, username, sinceCursor, includeRetweets);
+      if (nitterResult !== null) return nitterResult;
+
+      if (strategy === 'nitter') {
+        throw new Error('All Nitter instances failed and strategy=nitter (no direct fallback)');
       }
+
+      // Fallback: scrape x.com directly with the same browser session
+      return await this.scrapeDirectX(page, username, sinceCursor, includeRetweets);
+    } finally {
+      await browser.close();
     }
   }
 
@@ -67,181 +70,114 @@ export class XBrowserConnector extends BaseConnector {
     'https://nitter.poast.org',
   ];
 
-  private async fetchViaNitter(
+  // ─── Strategy 1: Nitter (returns null if all instances failed, caller falls through) ──
+
+  private async tryNitterInstances(
+    page: import('@cloudflare/puppeteer').Page,
     username: string,
     sinceCursor: string | null,
     includeRetweets: boolean,
-  ): Promise<FetchResult> {
+  ): Promise<FetchResult | null> {
     const preferred = ((this.config.nitter_instance as string) ?? '').replace(/\/$/, '');
     const instances = preferred
       ? [preferred, ...XBrowserConnector.NITTER_INSTANCES.filter(i => i !== preferred)]
       : XBrowserConnector.NITTER_INSTANCES;
 
-    // Open ONE browser and reuse it across all Nitter instance attempts
-    const browser = await puppeteer.launch(this.env.BROWSER);
-    try {
-      const page = await browser.newPage();
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-      );
+    for (const inst of instances) {
+      try {
+        const response = await page.goto(`${inst}/${username}`, { waitUntil: 'networkidle0', timeout: 25000 });
+        if (!response || response.status() >= 400) continue;
 
-      let lastError = '';
-      for (const inst of instances) {
-        try {
-          const url = `${inst}/${username}`;
-          const response = await page.goto(url, { waitUntil: 'networkidle0', timeout: 25000 });
-          if (!response || response.status() >= 400) {
-            lastError = `${inst} HTTP ${response?.status() ?? 'no response'}`;
-            continue;
-          }
+        await page.waitForSelector('.timeline-item, .error-panel, .timeline-none', { timeout: 10000 }).catch(() => {});
 
-          await page.waitForSelector('.timeline-item, .error-panel, .timeline-none', { timeout: 10000 }).catch(() => {});
+        const pageInfo = await page.evaluate(() => ({
+          hasError: !!document.querySelector('.error-panel'),
+          itemCount: document.querySelectorAll('.timeline-item').length,
+        }));
 
-          const pageInfo = await page.evaluate(() => ({
-            errorText: document.querySelector('.error-panel')?.textContent?.trim() ?? '',
-            hasError: !!document.querySelector('.error-panel'),
-            itemCount: document.querySelectorAll('.timeline-item').length,
-            bodySnippet: document.body?.innerText?.slice(0, 300) ?? '',
-          }));
+        if (pageInfo.hasError || pageInfo.itemCount === 0) continue;
 
-          if (pageInfo.hasError) { lastError = `${inst} error: ${pageInfo.errorText.slice(0, 150)}`; continue; }
-          if (pageInfo.itemCount === 0) { lastError = `${inst}: 0 items. Body: ${pageInfo.bodySnippet.slice(0, 150)}`; continue; }
+        const tweets = await page.evaluate((includeRT: boolean) => {
+          const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
+          document.querySelectorAll('.timeline-item').forEach((el) => {
+            const isRetweet = !!el.querySelector('.retweet-header');
+            if (!includeRT && isRetweet) return;
+            const href = el.querySelector('.tweet-link')?.getAttribute('href') ?? '';
+            const m = href.match(/\/status\/(\d+)/);
+            if (!m) return;
+            const text = el.querySelector('.tweet-content, .tweet-body .media-body')?.textContent?.trim() ?? '';
+            const date = (el.querySelector('.tweet-date a') as HTMLAnchorElement)?.getAttribute('title') ?? '';
+            const stats = el.querySelectorAll('.tweet-stat');
+            const parseNum = (i: number) => parseInt(stats[i]?.textContent?.replace(/,/g, '').match(/\d+/)?.[0] ?? '0', 10);
+            items.push({ id: m[1], text, date, isRetweet, replies: parseNum(0), retweets: parseNum(1), likes: parseNum(2) });
+          });
+          return items;
+        }, includeRetweets);
 
-          const tweets = await page.evaluate((includeRT: boolean) => {
-            const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
-            document.querySelectorAll('.timeline-item').forEach((el) => {
-              const isRetweet = !!el.querySelector('.retweet-header');
-              if (!includeRT && isRetweet) return;
-              const href = el.querySelector('.tweet-link')?.getAttribute('href') ?? '';
-              const m = href.match(/\/status\/(\d+)/);
-              if (!m) return;
-              const text = el.querySelector('.tweet-content, .tweet-body .media-body')?.textContent?.trim() ?? '';
-              const date = (el.querySelector('.tweet-date a') as HTMLAnchorElement)?.getAttribute('title') ?? '';
-              const stats = el.querySelectorAll('.tweet-stat');
-              const parseNum = (i: number) => parseInt(stats[i]?.textContent?.replace(/,/g, '').match(/\d+/)?.[0] ?? '0', 10);
-              items.push({ id: m[1], text, date, isRetweet, replies: parseNum(0), retweets: parseNum(1), likes: parseNum(2) });
-            });
-            return items;
-          }, includeRetweets);
-
-          return this.convertTweets(tweets, username, sinceCursor);
-        } catch (err) {
-          lastError = err instanceof Error ? err.message : String(err);
-          // If this is a browser infrastructure error (rate limit etc), stop trying more instances
-          if (lastError.includes('Rate limit exceeded') || lastError.includes('code: 429')) break;
-        }
+        if (tweets.length > 0) return this.convertTweets(tweets, username, sinceCursor);
+      } catch {
+        // Continue to next instance
       }
-      throw new Error(`All Nitter instances failed: ${lastError}`);
-    } finally {
-      await browser.close();
     }
+    return null; // All instances failed — caller will try direct x.com
   }
 
-  // ─── Strategy 2: Direct x.com scraping via Browser Rendering ──────────────
+  // ─── Strategy 2: Direct x.com scraping ────────────────────────────────────
 
-  private async fetchDirectX(
+  private async scrapeDirectX(
+    page: import('@cloudflare/puppeteer').Page,
     username: string,
     sinceCursor: string | null,
     includeRetweets: boolean,
   ): Promise<FetchResult> {
-    const url = `https://x.com/${username}`;
-    const browser = await puppeteer.launch(this.env.BROWSER);
+    await page.goto(`https://x.com/${username}`, { waitUntil: 'networkidle2', timeout: 30000 });
 
-    try {
-      const page = await browser.newPage();
-      await page.setUserAgent(
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-      );
-      // Set viewport to look like a real desktop browser
-      await page.setViewport({ width: 1280, height: 900 });
+    await page.waitForSelector('[data-testid="tweet"], [data-testid="error-detail"]', { timeout: 15000 }).catch(() => {});
+    await new Promise(r => setTimeout(r, 2000));
 
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    const pageState = await page.evaluate(() => ({
+      tweetCount: document.querySelectorAll('[data-testid="tweet"]').length,
+      hasLoginPrompt: !!document.querySelector('[data-testid="loginButton"]'),
+      hasError: !!document.querySelector('[data-testid="error-detail"]'),
+      errorText: document.querySelector('[data-testid="error-detail"]')?.textContent?.slice(0, 200) ?? '',
+      title: document.title ?? '',
+    }));
 
-      // Wait for tweets to render (x.com is a React SPA)
-      await page.waitForSelector('[data-testid="tweet"], [data-testid="error-detail"]', { timeout: 15000 }).catch(() => {});
-
-      // Small delay for React hydration
-      await new Promise(r => setTimeout(r, 2000));
-
-      // Check for login wall or errors
-      const pageState = await page.evaluate(() => {
-        const tweetCount = document.querySelectorAll('[data-testid="tweet"]').length;
-        const hasLoginPrompt = !!document.querySelector('[data-testid="loginButton"]');
-        const hasError = !!document.querySelector('[data-testid="error-detail"]');
-        const errorText = document.querySelector('[data-testid="error-detail"]')?.textContent ?? '';
-        const bodyText = document.body?.innerText?.slice(0, 500) ?? '';
-        const title = document.title ?? '';
-        return { tweetCount, hasLoginPrompt, hasError, errorText, bodyText, title };
-      });
-
-      if (pageState.hasError) {
-        throw new Error(`x.com error: ${pageState.errorText.slice(0, 200)}`);
-      }
-      if (pageState.tweetCount === 0) {
-        if (pageState.hasLoginPrompt) {
-          throw new Error(`x.com requires login for @${username}. Title: ${pageState.title}`);
-        }
-        throw new Error(`x.com: 0 tweets found for @${username}. Title: "${pageState.title}". Body: ${pageState.bodyText.slice(0, 200)}`);
-      }
-
-      // Extract tweets using data-testid attributes (stable across x.com updates)
-      const tweets = await page.evaluate((includeRT: boolean) => {
-        const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
-
-        document.querySelectorAll('[data-testid="tweet"]').forEach((tweetEl) => {
-          // Check for retweet indicator
-          const socialContext = tweetEl.querySelector('[data-testid="socialContext"]');
-          const isRetweet = socialContext?.textContent?.toLowerCase().includes('repost') ?? false;
-          if (!includeRT && isRetweet) return;
-
-          // Find the tweet link containing /status/ID
-          const links = tweetEl.querySelectorAll('a[href*="/status/"]');
-          let statusId = '';
-          for (const link of links) {
-            const href = link.getAttribute('href') ?? '';
-            const m = href.match(/\/status\/(\d+)/);
-            if (m) { statusId = m[1]; break; }
-          }
-          if (!statusId) return;
-
-          // Tweet text
-          const textEl = tweetEl.querySelector('[data-testid="tweetText"]');
-          const text = textEl?.textContent?.trim() ?? '';
-
-          // Timestamp
-          const timeEl = tweetEl.querySelector('time');
-          const date = timeEl?.getAttribute('datetime') ?? '';
-
-          // Engagement stats via aria-label on group buttons
-          let replies = 0, retweets = 0, likes = 0;
-          const replyBtn = tweetEl.querySelector('[data-testid="reply"]');
-          const retweetBtn = tweetEl.querySelector('[data-testid="retweet"]');
-          const likeBtn = tweetEl.querySelector('[data-testid="like"]');
-
-          const parseAriaNum = (el: Element | null): number => {
-            const aria = el?.getAttribute('aria-label') ?? '';
-            const m = aria.match(/(\d[\d,]*)/);
-            return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
-          };
-
-          replies = parseAriaNum(replyBtn);
-          retweets = parseAriaNum(retweetBtn);
-          likes = parseAriaNum(likeBtn);
-
-          items.push({ id: statusId, text, date, isRetweet, replies, retweets, likes });
-        });
-
-        return items;
-      }, includeRetweets);
-
-      if (tweets.length === 0) {
-        throw new Error(`x.com: found ${pageState.tweetCount} tweet elements but failed to extract any valid data`);
-      }
-
-      return this.convertTweets(tweets, username, sinceCursor);
-    } finally {
-      await browser.close();
+    if (pageState.hasError) throw new Error(`x.com error: ${pageState.errorText}`);
+    if (pageState.tweetCount === 0) {
+      const reason = pageState.hasLoginPrompt ? 'login required' : `0 tweets. Title: "${pageState.title}"`;
+      throw new Error(`x.com: ${reason} for @${username}`);
     }
+
+    const tweets = await page.evaluate((includeRT: boolean) => {
+      const items: Array<{ id: string; text: string; date: string; isRetweet: boolean; replies: number; retweets: number; likes: number }> = [];
+      document.querySelectorAll('[data-testid="tweet"]').forEach((tweetEl) => {
+        const isRetweet = tweetEl.querySelector('[data-testid="socialContext"]')?.textContent?.toLowerCase().includes('repost') ?? false;
+        if (!includeRT && isRetweet) return;
+        let statusId = '';
+        for (const link of tweetEl.querySelectorAll('a[href*="/status/"]')) {
+          const m = link.getAttribute('href')?.match(/\/status\/(\d+)/);
+          if (m) { statusId = m[1]; break; }
+        }
+        if (!statusId) return;
+        const text = tweetEl.querySelector('[data-testid="tweetText"]')?.textContent?.trim() ?? '';
+        const date = tweetEl.querySelector('time')?.getAttribute('datetime') ?? '';
+        const parseAriaNum = (el: Element | null) => {
+          const m = (el?.getAttribute('aria-label') ?? '').match(/(\d[\d,]*)/);
+          return m ? parseInt(m[1].replace(/,/g, ''), 10) : 0;
+        };
+        items.push({
+          id: statusId, text, date, isRetweet,
+          replies: parseAriaNum(tweetEl.querySelector('[data-testid="reply"]')),
+          retweets: parseAriaNum(tweetEl.querySelector('[data-testid="retweet"]')),
+          likes: parseAriaNum(tweetEl.querySelector('[data-testid="like"]')),
+        });
+      });
+      return items;
+    }, includeRetweets);
+
+    if (tweets.length === 0) throw new Error(`x.com: ${pageState.tweetCount} tweet elements found but no valid data extracted`);
+    return this.convertTweets(tweets, username, sinceCursor);
   }
 
   // ─── Shared conversion ────────────────────────────────────────────────────
