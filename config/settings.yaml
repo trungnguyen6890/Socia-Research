@@ -1,0 +1,49 @@
+database:
+  url: "sqlite+aiosqlite:///data/socia.db"
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+scheduler:
+  default_interval_minutes: 30
+
+rate_limits:
+  youtube:
+    requests_per_window: 90
+    window_seconds: 100
+  x_twitter:
+    requests_per_window: 15
+    window_seconds: 900
+  facebook_page:
+    requests_per_window: 200
+    window_seconds: 3600
+  instagram_pro:
+    requests_per_window: 200
+    window_seconds: 3600
+  rss:
+    requests_per_window: 60
+    window_seconds: 60
+  website:
+    requests_per_window: 10
+    window_seconds: 60
+  telegram:
+    requests_per_window: 30
+    window_seconds: 60
+
+connectors:
+  youtube:
+    api_key_env: "YOUTUBE_API_KEY"
+  x_twitter:
+    bearer_token_env: "X_BEARER_TOKEN"
+  telegram:
+    api_id_env: "TELEGRAM_API_ID"
+    api_hash_env: "TELEGRAM_API_HASH"
+  facebook_page:
+    access_token_env: "FB_ACCESS_TOKEN"
+  instagram_pro:
+    access_token_env: "IG_ACCESS_TOKEN"
+
+logging:
+  level: "INFO"
+  format: "json"

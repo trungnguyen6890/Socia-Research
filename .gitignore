@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.env
+.venv/
+venv/
+data/*.db
+data/*.db-journal
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.log
+.DS_Store
+
+# Node
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+
+# Wrangler
+.wrangler/
+
+# Secrets
+.dev.vars
+
+# Claude memory
+.claude/

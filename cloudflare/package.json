@@ -1,0 +1,23 @@
+{
+  "name": "socia-research-cf",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 migrations apply socia-research",
+    "db:migrate:local": "wrangler d1 migrations apply socia-research --local",
+    "db:create": "wrangler d1 create socia-research",
+    "kv:create": "wrangler kv:namespace create RATE_KV",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.4.0"
+  },
+  "devDependencies": {
+    "@cloudflare/puppeteer": "^1.0.6",
+    "@cloudflare/workers-types": "^4.20240924.0",
+    "typescript": "^5.5.2",
+    "wrangler": "^3.70.0"
+  }
+}

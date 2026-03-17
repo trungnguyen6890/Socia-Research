@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if source else 'New' }} Source - Socia Research{% endblock %}
+{% block content %}
+<h2>{{ 'Edit' if source else 'New' }} Source</h2>
+
+<form method="post" action="/admin/sources/{{ source.id + '/edit' if source else 'new' }}" style="max-width: 600px;">
+    <div class="form-group">
+        <label>Name</label>
+        <input type="text" name="name" value="{{ source.name if source else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label>Connector Type</label>
+        <select name="connector_type">
+            {% for ct in connector_types %}
+            <option value="{{ ct }}" {% if source and source.connector_type == ct %}selected{% endif %}>{{ ct }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>Source Mode</label>
+        <select name="source_mode">
+            {% for sm in source_modes %}
+            <option value="{{ sm }}" {% if source and source.source_mode == sm %}selected{% endif %}>{{ sm }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>URL or Handle</label>
+        <input type="text" name="url_or_handle" value="{{ source.url_or_handle if source else '' }}" placeholder="Feed URL, channel ID, page ID...">
+    </div>
+
+    <div class="form-group">
+        <label>Config (JSON)</label>
+        <textarea name="config_json" placeholder='{"max_results": 25}'>{{ source.config | tojson if source and source.config else '{}' }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Tags (comma-separated)</label>
+        <input type="text" name="tags_str" value="{{ source.tags | join(', ') if source and source.tags else '' }}" placeholder="tech, news, competitor">
+    </div>
+
+    <div class="form-group">
+        <label>Priority (1=highest, 10=lowest)</label>
+        <input type="number" name="priority" value="{{ source.priority if source else 5 }}" min="1" max="10">
+    </div>
+
+    {% if source %}
+    <div class="form-group">
+        <div class="checkbox-group">
+            <input type="checkbox" name="is_active" value="true" id="is_active" {% if source.is_active %}checked{% endif %}>
+            <label for="is_active" style="margin-bottom:0">Active</label>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if source else 'Create' }} Source</button>
+        <a href="/admin/sources" class="btn btn-outline">Cancel</a>
+    </div>
+</form>
+{% endblock %}

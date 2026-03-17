@@ -1,0 +1,24 @@
+name = "socia-research"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+usage_model = "unbound"
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "socia-research"
+database_id = "fc6f740b-9c9a-49ea-8d38-d0b9aba2bfa3"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "RATE_KV"
+id = "7b44c51fb6a64bd4a3b797f6468d0900"
+
+[browser]
+binding = "BROWSER"
+
+[dev]
+port = 8787

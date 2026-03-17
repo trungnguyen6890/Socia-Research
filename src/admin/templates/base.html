@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Socia Research{% endblock %}</title>
+    <link rel="stylesheet" href="/admin/static/style.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10" defer></script>
+</head>
+<body>
+<div class="layout">
+    <aside class="sidebar">
+        <h1>Socia Research</h1>
+        <nav>
+            <a href="/admin/" {% if request.url.path == '/admin/' %}class="active"{% endif %}>Dashboard</a>
+            <a href="/admin/sources" {% if '/sources' in request.url.path %}class="active"{% endif %}>Sources</a>
+            <a href="/admin/keywords" {% if '/keywords' in request.url.path %}class="active"{% endif %}>Keywords</a>
+            <a href="/admin/goals" {% if '/goals' in request.url.path %}class="active"{% endif %}>Goals</a>
+            <a href="/admin/schedules" {% if '/schedules' in request.url.path %}class="active"{% endif %}>Schedules</a>
+            <a href="/admin/content" {% if '/content' in request.url.path %}class="active"{% endif %}>Content</a>
+        </nav>
+    </aside>
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

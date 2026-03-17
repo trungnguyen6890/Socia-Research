@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Goals - Socia Research{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <h2>Research Goals</h2>
+    <a href="/admin/goals/new" class="btn btn-primary">+ Add Goal</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Description</th>
+            <th>Priority</th>
+            <th>Keywords</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for goal in goals %}
+        <tr>
+            <td><strong>{{ goal.name }}</strong></td>
+            <td style="max-width:250px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ goal.description or '-' }}</td>
+            <td>{{ goal.priority }}</td>
+            <td>
+                {% for kw in goal.keywords %}
+                <span class="badge badge-info">{{ kw.keyword }}</span>
+                {% endfor %}
+            </td>
+            <td>
+                {% if goal.is_active %}
+                <span class="badge badge-success">active</span>
+                {% else %}
+                <span class="badge badge-muted">inactive</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                <a href="/admin/goals/{{ goal.id }}/edit" class="btn btn-sm btn-outline">Edit</a>
+                <form method="post" action="/admin/goals/{{ goal.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                    <button class="btn btn-sm btn-danger" type="submit">Del</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not goals %}
+        <tr><td colspan="6" style="text-align:center; color:var(--text-muted);">No goals defined yet</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

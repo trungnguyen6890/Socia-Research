@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Content - Socia Research{% endblock %}
+{% block content %}
+<h2>Content Items <span style="color:var(--text-muted); font-size:0.9rem; font-weight:400;">({{ total }} total)</span></h2>
+
+<form method="get" action="/admin/content" class="toolbar" style="margin-bottom: 1.5rem;">
+    <div class="filters">
+        <input type="text" name="search" value="{{ search }}" placeholder="Search title/text...">
+        <select name="source_id">
+            <option value="">All Sources</option>
+            {% for src in sources %}
+            <option value="{{ src.id }}" {% if source_id == src.id %}selected{% endif %}>{{ src.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="number" name="min_score" value="{{ min_score if min_score is not none else '' }}" placeholder="Min score" step="0.1" min="0" max="1" style="width:100px;">
+        <div class="checkbox-group">
+            <input type="checkbox" name="hide_duplicates" value="true" id="hide_dup" {% if hide_duplicates %}checked{% endif %}>
+            <label for="hide_dup" style="margin-bottom:0; font-size:0.85rem;">Hide duplicates</label>
+        </div>
+        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+    </div>
+</form>
+
+<table>
+    <thead>
+        <tr>
+            <th>Title / Text</th>
+            <th>Source</th>
+            <th>Quality</th>
+            <th>Signal</th>
+            <th>Tags</th>
+            <th>Published</th>
+            <th>Dup</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td style="max-width:350px;">
+                <a href="/admin/content/{{ item.id }}">
+                    <strong>{{ item.title or (item.text_content[:80] + '...' if item.text_content and item.text_content|length > 80 else item.text_content or 'No content') }}</strong>
+                </a>
+            </td>
+            <td><span class="badge badge-info">{{ item.connector_type }}</span></td>
+            <td>
+                <span class="score-bar"><span class="score-bar-fill" style="width:{{ (item.quality_score * 100)|int }}%"></span></span>
+                {{ '%.2f'|format(item.quality_score) }}
+            </td>
+            <td>
+                <span class="score-bar"><span class="score-bar-fill" style="width:{{ (item.signal_score * 100)|int }}%"></span></span>
+                {{ '%.2f'|format(item.signal_score) }}
+            </td>
+            <td>
+                {% for tag in item.tags %}
+                <span class="badge badge-muted">{{ tag }}</span>
+                {% endfor %}
+            </td>
+            <td>{{ item.publish_time.strftime('%m/%d %H:%M') if item.publish_time else '-' }}</td>
+            <td>{% if item.is_duplicate %}<span class="badge badge-warning">dup</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% if not items %}
+        <tr><td colspan="7" style="text-align:center; color:var(--text-muted);">No content items found</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/admin/content?page={{ page - 1 }}&search={{ search }}&source_id={{ source_id or '' }}&min_score={{ min_score or '' }}&hide_duplicates={{ hide_duplicates }}" class="btn btn-sm btn-outline">Prev</a>
+    {% endif %}
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="current">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 2 or (p >= page - 1 and p <= page + 1) %}
+        <a href="/admin/content?page={{ p }}&search={{ search }}&source_id={{ source_id or '' }}&min_score={{ min_score or '' }}&hide_duplicates={{ hide_duplicates }}">{{ p }}</a>
+        {% elif p == 4 or p == total_pages - 2 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+    {% if page < total_pages %}
+    <a href="/admin/content?page={{ page + 1 }}&search={{ search }}&source_id={{ source_id or '' }}&min_score={{ min_score or '' }}&hide_duplicates={{ hide_duplicates }}" class="btn btn-sm btn-outline">Next</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

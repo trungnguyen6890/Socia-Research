@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if goal else 'New' }} Goal - Socia Research{% endblock %}
+{% block content %}
+<h2>{{ 'Edit' if goal else 'New' }} Goal</h2>
+
+<form method="post" action="/admin/goals/{{ goal.id + '/edit' if goal else 'new' }}" style="max-width: 600px;">
+    <div class="form-group">
+        <label>Name</label>
+        <input type="text" name="name" value="{{ goal.name if goal else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label>Description</label>
+        <textarea name="description">{{ goal.description if goal else '' }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label>Priority (1=highest, 10=lowest)</label>
+        <input type="number" name="priority" value="{{ goal.priority if goal else 5 }}" min="1" max="10">
+    </div>
+
+    <div class="form-group">
+        <label>Linked Keywords</label>
+        {% for kw in all_keywords %}
+        <div class="checkbox-group" style="margin-bottom: 0.3rem;">
+            <input type="checkbox" name="keyword_ids" value="{{ kw.id }}" id="kw_{{ kw.id }}"
+                {% if kw.id in selected_keyword_ids %}checked{% endif %}>
+            <label for="kw_{{ kw.id }}" style="margin-bottom:0">{{ kw.keyword }} <span style="color:var(--text-muted)">({{ kw.category }})</span></label>
+        </div>
+        {% endfor %}
+        {% if not all_keywords %}
+        <p style="color:var(--text-muted); font-size:0.85rem;">No keywords defined. <a href="/admin/keywords/new">Create one first.</a></p>
+        {% endif %}
+    </div>
+
+    {% if goal %}
+    <div class="form-group">
+        <div class="checkbox-group">
+            <input type="checkbox" name="is_active" value="true" id="is_active" {% if goal.is_active %}checked{% endif %}>
+            <label for="is_active" style="margin-bottom:0">Active</label>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if goal else 'Create' }}</button>
+        <a href="/admin/goals" class="btn btn-outline">Cancel</a>
+    </div>
+</form>
+{% endblock %}

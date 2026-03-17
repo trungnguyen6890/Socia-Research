@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Keywords - Socia Research{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <h2>Keywords</h2>
+    <a href="/admin/keywords/new" class="btn btn-primary">+ Add Keyword</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Keyword</th>
+            <th>Category</th>
+            <th>Match Mode</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for kw in keywords %}
+        <tr>
+            <td><strong>{{ kw.keyword }}</strong></td>
+            <td><span class="badge badge-info">{{ kw.category }}</span></td>
+            <td>{{ kw.match_mode }}</td>
+            <td>
+                {% if kw.is_active %}
+                <span class="badge badge-success">active</span>
+                {% else %}
+                <span class="badge badge-muted">inactive</span>
+                {% endif %}
+            </td>
+            <td class="actions">
+                <a href="/admin/keywords/{{ kw.id }}/edit" class="btn btn-sm btn-outline">Edit</a>
+                <form method="post" action="/admin/keywords/{{ kw.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                    <button class="btn btn-sm btn-danger" type="submit">Del</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not keywords %}
+        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No keywords defined yet</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

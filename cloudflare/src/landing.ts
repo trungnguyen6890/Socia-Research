@@ -1,0 +1,1040 @@
+export const LANDING_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Socia Research — Signal Intelligence Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=IBM+Plex+Mono:wght@300;400;500&family=Crimson+Pro:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --bg: #080b14;
+    --bg-2: #0d1220;
+    --bg-card: #0f1422;
+    --border: rgba(245, 166, 35, 0.12);
+    --border-bright: rgba(245, 166, 35, 0.4);
+    --amber: #f5a623;
+    --amber-dim: rgba(245, 166, 35, 0.6);
+    --amber-glow: rgba(245, 166, 35, 0.08);
+    --green: #00e878;
+    --green-dim: rgba(0, 232, 120, 0.5);
+    --green-glow: rgba(0, 232, 120, 0.06);
+    --red: #ff4757;
+    --text-primary: #e8dfc8;
+    --text-secondary: rgba(232, 223, 200, 0.55);
+    --text-muted: rgba(232, 223, 200, 0.28);
+    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'Cormorant Garamond', Georgia, serif;
+    --body: 'Crimson Pro', Georgia, serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: var(--body);
+    font-size: 18px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.45;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 48px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(8, 11, 20, 0.85);
+    backdrop-filter: blur(16px);
+  }
+
+  .nav-logo {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 300;
+    letter-spacing: 0.12em;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-transform: uppercase;
+  }
+
+  .nav-logo-mark { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; }
+  .nav-logo-mark svg { width: 100%; height: 100%; }
+
+  .nav-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--green);
+    border: 1px solid var(--green-dim);
+    padding: 3px 8px;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .nav-badge::before {
+    content: '';
+    width: 5px; height: 5px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .nav-links { display: flex; gap: 36px; list-style: none; }
+  .nav-links a {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--text-secondary);
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--amber); }
+
+  .hero {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    padding: 120px 48px 80px;
+    position: relative;
+    overflow: hidden;
+    gap: 60px;
+  }
+
+  .hero-radar {
+    position: absolute;
+    right: -60px; top: 50%;
+    transform: translateY(-50%);
+    width: 560px; height: 560px;
+    pointer-events: none;
+    opacity: 0.18;
+  }
+
+  .radar-ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--amber);
+    animation: radar-expand 4s ease-in-out infinite;
+  }
+
+  .radar-ring:nth-child(2) { animation-delay: 1.3s; transform: scale(0.7); }
+  .radar-ring:nth-child(3) { animation-delay: 2.6s; transform: scale(0.4); }
+
+  @keyframes radar-expand {
+    0% { opacity: 0; transform: scale(0.15); }
+    30% { opacity: 1; }
+    100% { opacity: 0; transform: scale(1.1); }
+  }
+
+  .hero::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent 0%, var(--amber) 50%, transparent 100%);
+    opacity: 0.3;
+    animation: scanline 8s linear infinite;
+  }
+
+  @keyframes scanline {
+    0% { top: 0; }
+    100% { top: 100%; }
+  }
+
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245, 166, 35, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245, 166, 35, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events: none;
+  }
+
+  .hero-left { position: relative; z-index: 2; animation: fade-up 0.7s ease both; }
+  .hero-right { position: relative; z-index: 2; animation: fade-up 0.7s ease 0.2s both; }
+
+  .hero-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 28px;
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .hero-eyebrow::before { content: ''; width: 32px; height: 1px; background: var(--amber); }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(56px, 6vw, 92px);
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+    margin-bottom: 32px;
+  }
+
+  h1 em { font-style: italic; color: var(--amber); }
+  h1 .line-2 { display: block; padding-left: 60px; }
+
+  .hero-desc {
+    font-family: var(--body);
+    font-size: 20px;
+    font-weight: 300;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    max-width: 440px;
+    margin-bottom: 48px;
+    font-style: italic;
+  }
+
+  .hero-ctas { display: flex; gap: 16px; align-items: center; }
+
+  .btn-primary {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--bg);
+    background: var(--amber);
+    border: none;
+    padding: 14px 32px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary:hover { background: var(--text-primary); transform: translateY(-1px); }
+
+  .btn-secondary {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-bright);
+    padding: 14px 32px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-secondary:hover { color: var(--amber); border-color: var(--amber); }
+
+  .terminal-window {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .terminal-window::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--amber), transparent);
+    opacity: 0.6;
+  }
+
+  .terminal-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(245, 166, 35, 0.03);
+  }
+
+  .terminal-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .terminal-dot.red { background: #ff4757; opacity: 0.7; }
+  .terminal-dot.yellow { background: var(--amber); opacity: 0.7; }
+  .terminal-dot.green { background: var(--green); opacity: 0.7; }
+
+  .terminal-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    margin-left: 8px;
+  }
+
+  .terminal-body {
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.8;
+    max-height: 380px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .terminal-body::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 80px;
+    background: linear-gradient(transparent, var(--bg-2));
+  }
+
+  .t-line { display: flex; gap: 12px; opacity: 0; animation: t-appear 0.4s ease forwards; }
+  .t-prompt { color: var(--amber); flex-shrink: 0; }
+  .t-platform { color: var(--green); flex-shrink: 0; min-width: 80px; }
+  .t-content { color: var(--text-secondary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .t-score { color: var(--amber-dim); flex-shrink: 0; margin-left: auto; padding-left: 12px; }
+
+  @keyframes t-appear {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .stats-section { padding: 0 48px 80px; animation: fade-up 0.7s ease 0.4s both; }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    border: 1px solid var(--border);
+    background: #0f1422;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stats-grid::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--amber) 0%, var(--green) 50%, var(--amber) 100%);
+    opacity: 0.5;
+  }
+
+  .stat-item {
+    padding: 40px 36px;
+    border-right: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+    transition: background 0.3s;
+  }
+
+  .stat-item:last-child { border-right: none; }
+  .stat-item:hover { background: var(--amber-glow); }
+
+  .stat-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 2px;
+    background: var(--amber);
+    width: 0;
+    transition: width 0.4s ease;
+  }
+
+  .stat-item:hover::after { width: 100%; }
+
+  .stat-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.25em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .stat-number {
+    font-family: var(--serif);
+    font-size: 56px;
+    font-weight: 300;
+    line-height: 1;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+
+  .stat-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .stat-sub::before { content: '▲'; font-size: 8px; }
+
+  .section-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .section-title {
+    font-family: var(--serif);
+    font-size: 36px;
+    font-weight: 300;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  .section-title em { font-style: italic; color: var(--amber); }
+
+  .section-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .live-dot {
+    width: 6px; height: 6px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+
+  .platforms-section { padding: 0 48px 80px; }
+
+  .platforms-strip {
+    display: flex;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .platform-badge {
+    flex: 1;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.25s;
+    background: #0f1422;
+    position: relative;
+  }
+
+  .platform-badge:last-child { border-right: none; }
+  .platform-badge:hover { background: var(--amber-glow); }
+
+  .platform-badge.active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .platform-badge[data-platform="twitter"].active::before { background: #1da1f2; }
+  .platform-badge[data-platform="youtube"].active::before { background: #ff0000; }
+  .platform-badge[data-platform="telegram"].active::before { background: #2ca5e0; }
+  .platform-badge[data-platform="facebook"].active::before { background: #1877f2; }
+  .platform-badge[data-platform="instagram"].active::before { background: #e1306c; }
+  .platform-badge[data-platform="tiktok"].active::before { background: #69c9d0; }
+  .platform-badge[data-platform="rss"].active::before { background: var(--amber); }
+  .platform-badge[data-platform="threads"].active::before { background: #888; }
+
+  .platform-icon { font-size: 20px; line-height: 1; }
+  .platform-name { font-family: var(--mono); font-size: 9px; letter-spacing: 0.15em; color: var(--text-muted); text-transform: uppercase; }
+  .platform-count { font-family: var(--serif); font-size: 22px; font-weight: 300; color: var(--text-secondary); }
+
+  .feed-section { padding: 0 48px 80px; }
+
+  .feed-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+  }
+
+  .feed-main { display: flex; flex-direction: column; gap: 2px; }
+
+  .content-item {
+    background: #0f1422;
+    border: 1px solid var(--border);
+    border-left: 3px solid transparent;
+    padding: 24px 28px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 20px;
+    align-items: start;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    animation: fade-up 0.5s ease both;
+  }
+
+  .content-item:hover { background: var(--amber-glow); border-color: var(--border-bright); border-left-color: var(--amber); transform: translateX(4px); }
+  .content-item[data-platform="twitter"] { border-left-color: rgba(29, 161, 242, 0.5); }
+  .content-item[data-platform="youtube"] { border-left-color: rgba(255, 0, 0, 0.5); }
+  .content-item[data-platform="telegram"] { border-left-color: rgba(44, 165, 224, 0.5); }
+  .content-item[data-platform="facebook"] { border-left-color: rgba(24, 119, 242, 0.5); }
+  .content-item[data-platform="instagram"] { border-left-color: rgba(225, 48, 108, 0.5); }
+  .content-item[data-platform="tiktok"] { border-left-color: rgba(105, 201, 208, 0.5); }
+  .content-item[data-platform="rss"] { border-left-color: rgba(245, 166, 35, 0.5); }
+
+  .item-rank { font-family: var(--mono); font-size: 11px; color: var(--text-muted); min-width: 28px; padding-top: 2px; }
+  .item-body { min-width: 0; }
+
+  .item-meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+
+  .item-platform-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border: 1px solid;
+  }
+
+  .item-platform-tag.twitter { color: #1da1f2; border-color: rgba(29, 161, 242, 0.3); background: rgba(29, 161, 242, 0.05); }
+  .item-platform-tag.youtube { color: #ff4444; border-color: rgba(255, 0, 0, 0.3); background: rgba(255, 0, 0, 0.05); }
+  .item-platform-tag.telegram { color: #2ca5e0; border-color: rgba(44, 165, 224, 0.3); background: rgba(44, 165, 224, 0.05); }
+  .item-platform-tag.instagram { color: #e1306c; border-color: rgba(225, 48, 108, 0.3); background: rgba(225, 48, 108, 0.05); }
+  .item-platform-tag.tiktok { color: #69c9d0; border-color: rgba(105, 201, 208, 0.3); background: rgba(105, 201, 208, 0.05); }
+  .item-platform-tag.rss { color: var(--amber); border-color: var(--border-bright); background: var(--amber-glow); }
+
+  .item-source { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+  .item-time { font-family: var(--mono); font-size: 10px; color: var(--text-muted); margin-left: auto; }
+
+  .item-title {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 400;
+    line-height: 1.35;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .item-excerpt {
+    font-family: var(--body);
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 12px;
+    font-style: italic;
+  }
+
+  .item-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    background: rgba(232, 223, 200, 0.04);
+    border: 1px solid rgba(232, 223, 200, 0.1);
+    padding: 2px 8px;
+    text-transform: uppercase;
+  }
+
+  .tag.hot { color: var(--red); border-color: rgba(255, 71, 87, 0.3); background: rgba(255, 71, 87, 0.05); }
+  .tag.trending { color: var(--amber); border-color: var(--border-bright); background: var(--amber-glow); }
+
+  .item-score-col { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; padding-top: 2px; }
+  .score-badge { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--amber); line-height: 1; }
+  .score-badge.high { color: var(--red); }
+  .score-badge.low { color: var(--text-muted); }
+  .score-label { font-family: var(--mono); font-size: 8px; color: var(--text-muted); letter-spacing: 0.12em; text-transform: uppercase; }
+  .engagement-mini { display: flex; flex-direction: column; gap: 2px; align-items: flex-end; }
+  .eng-row { font-family: var(--mono); font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+  .feed-sidebar { display: flex; flex-direction: column; gap: 24px; }
+
+  .sidebar-widget { background: #0f1422; border: 1px solid var(--border); overflow: hidden; }
+
+  .widget-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(245, 166, 35, 0.03);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .widget-title { font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--amber); text-transform: uppercase; }
+  .widget-count { font-family: var(--mono); font-size: 10px; color: var(--text-muted); }
+  .widget-body { padding: 20px; }
+
+  .keyword-list { display: flex; flex-direction: column; gap: 2px; }
+
+  .keyword-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(232, 223, 200, 0.02);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .keyword-row:hover { border-color: var(--border); background: var(--amber-glow); }
+  .keyword-text { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); }
+  .keyword-cat { font-family: var(--mono); font-size: 9px; color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .keyword-hits { font-family: var(--serif); font-size: 18px; font-weight: 300; color: var(--amber); }
+
+  .spark-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .spark-label { font-family: var(--mono); font-size: 9px; color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; width: 60px; flex-shrink: 0; }
+  .spark-bar-track { flex: 1; height: 4px; background: rgba(232, 223, 200, 0.06); position: relative; overflow: hidden; }
+  .spark-bar { position: absolute; top: 0; left: 0; bottom: 0; transition: width 1.5s ease; width: 0; }
+  .spark-bar.amber { background: var(--amber); }
+  .spark-bar.green { background: var(--green); }
+  .spark-bar.red { background: var(--red); }
+  .spark-bar.blue { background: #2ca5e0; }
+  .spark-val { font-family: var(--mono); font-size: 10px; color: var(--text-secondary); width: 32px; text-align: right; flex-shrink: 0; }
+
+  .pipeline-section { padding: 0 48px 100px; }
+
+  .pipeline-viz {
+    display: flex;
+    align-items: stretch;
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .pipeline-stage {
+    flex: 1;
+    padding: 36px 28px;
+    border-right: 1px solid var(--border);
+    background: #0f1422;
+    position: relative;
+    transition: background 0.2s;
+  }
+
+  .pipeline-stage:last-child { border-right: none; }
+  .pipeline-stage:hover { background: var(--amber-glow); }
+
+  .pipeline-stage::after {
+    content: '\u2192';
+    position: absolute;
+    right: -14px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 16px;
+    color: var(--amber);
+    z-index: 2;
+  }
+
+  .pipeline-stage:last-child::after { display: none; }
+
+  .stage-num { font-family: var(--mono); font-size: 9px; color: var(--text-muted); letter-spacing: 0.2em; margin-bottom: 12px; }
+  .stage-name { font-family: var(--serif); font-size: 24px; font-weight: 300; color: var(--text-primary); margin-bottom: 8px; }
+  .stage-name em { font-style: italic; color: var(--amber); }
+  .stage-desc { font-family: var(--body); font-size: 14px; color: var(--text-secondary); line-height: 1.5; font-style: italic; }
+  .stage-throughput { margin-top: 20px; font-family: var(--mono); font-size: 28px; font-weight: 300; color: var(--green); }
+  .stage-throughput-label { font-family: var(--mono); font-size: 9px; color: var(--text-muted); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 4px; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg-2);
+  }
+
+  .footer-logo { font-family: var(--serif); font-size: 18px; font-weight: 300; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-secondary); }
+  .footer-info { font-family: var(--mono); font-size: 10px; color: var(--text-muted); letter-spacing: 0.1em; text-align: center; line-height: 1.8; }
+  .footer-status { font-family: var(--mono); font-size: 10px; color: var(--green); letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; }
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-item:nth-child(1) { animation-delay: 0.1s; }
+  .content-item:nth-child(2) { animation-delay: 0.2s; }
+  .content-item:nth-child(3) { animation-delay: 0.3s; }
+  .content-item:nth-child(4) { animation-delay: 0.4s; }
+  .content-item:nth-child(5) { animation-delay: 0.5s; }
+  .content-item:nth-child(6) { animation-delay: 0.6s; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">
+    <div class="nav-logo-mark">
+      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="14" cy="14" r="13" stroke="#f5a623" stroke-width="1.2" opacity="0.6"/>
+        <circle cx="14" cy="14" r="8" stroke="#f5a623" stroke-width="1.2" opacity="0.4"/>
+        <circle cx="14" cy="14" r="3" fill="#f5a623" opacity="0.8"/>
+        <line x1="14" y1="1" x2="14" y2="6" stroke="#f5a623" stroke-width="1.2" opacity="0.5"/>
+        <line x1="14" y1="22" x2="14" y2="27" stroke="#f5a623" stroke-width="1.2" opacity="0.5"/>
+        <line x1="1" y1="14" x2="6" y2="14" stroke="#f5a623" stroke-width="1.2" opacity="0.5"/>
+        <line x1="22" y1="14" x2="27" y2="14" stroke="#f5a623" stroke-width="1.2" opacity="0.5"/>
+      </svg>
+    </div>
+    Socia Research
+  </div>
+  <ul class="nav-links">
+    <li><a href="#stats">Intelligence</a></li>
+    <li><a href="#feed">Feed</a></li>
+    <li><a href="#pipeline">Pipeline</a></li>
+    <li><a href="#platforms">Platforms</a></li>
+    <li><a href="/admin/">Admin</a></li>
+  </ul>
+  <div class="nav-badge">Live &middot; Monitoring</div>
+</nav>
+
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-radar">
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+    <div class="radar-ring"></div>
+  </div>
+  <div class="hero-left">
+    <div class="hero-eyebrow">Signal Intelligence Platform</div>
+    <h1>
+      Monitor the<br>
+      <em>social pulse</em>
+      <span class="line-2">of the web.</span>
+    </h1>
+    <p class="hero-desc">
+      Track, normalize, and score content across every major platform &mdash; from a single unified intelligence layer.
+    </p>
+    <div class="hero-ctas">
+      <a href="#feed" class="btn-primary">View Live Feed</a>
+      <a href="/admin/" class="btn-secondary">Open Admin</a>
+    </div>
+  </div>
+  <div class="hero-right">
+    <div class="terminal-window">
+      <div class="terminal-header">
+        <div class="terminal-dot red"></div>
+        <div class="terminal-dot yellow"></div>
+        <div class="terminal-dot green"></div>
+        <span class="terminal-title">socia-research &middot; pipeline.runner &middot; live</span>
+      </div>
+      <div class="terminal-body" id="terminal-body"></div>
+    </div>
+  </div>
+</section>
+
+<section class="stats-section" id="stats">
+  <div class="stats-grid">
+    <div class="stat-item">
+      <div class="stat-label">Sources Active</div>
+      <div class="stat-number"><span class="counter" data-target="47">0</span></div>
+      <div class="stat-sub">+3 this week</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Items Collected</div>
+      <div class="stat-number"><span class="counter" data-target="12847">0</span></div>
+      <div class="stat-sub">+284 today</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Keywords Tracked</div>
+      <div class="stat-number"><span class="counter" data-target="183">0</span></div>
+      <div class="stat-sub">+12 added</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-label">Platforms</div>
+      <div class="stat-number"><span class="counter" data-target="8">0</span></div>
+      <div class="stat-sub">All connected</div>
+    </div>
+  </div>
+</section>
+
+<section class="platforms-section" id="platforms">
+  <div class="section-header">
+    <h2 class="section-title">Platform <em>Coverage</em></h2>
+    <span class="section-meta"><div class="live-dot"></div> 8 / 8 operational</span>
+  </div>
+  <div class="platforms-strip">
+    <div class="platform-badge active" data-platform="twitter">
+      <span class="platform-icon">\u{1D54F}</span>
+      <span class="platform-name">Twitter/X</span>
+      <span class="platform-count">4,821</span>
+    </div>
+    <div class="platform-badge active" data-platform="youtube">
+      <span class="platform-icon">&#9654;</span>
+      <span class="platform-name">YouTube</span>
+      <span class="platform-count">1,204</span>
+    </div>
+    <div class="platform-badge active" data-platform="telegram">
+      <span class="platform-icon">&#10004;</span>
+      <span class="platform-name">Telegram</span>
+      <span class="platform-count">3,156</span>
+    </div>
+    <div class="platform-badge active" data-platform="facebook">
+      <span class="platform-icon">f</span>
+      <span class="platform-name">Facebook</span>
+      <span class="platform-count">892</span>
+    </div>
+    <div class="platform-badge active" data-platform="instagram">
+      <span class="platform-icon">&#9711;</span>
+      <span class="platform-name">Instagram</span>
+      <span class="platform-count">1,543</span>
+    </div>
+    <div class="platform-badge active" data-platform="tiktok">
+      <span class="platform-icon">&#9835;</span>
+      <span class="platform-name">TikTok</span>
+      <span class="platform-count">684</span>
+    </div>
+    <div class="platform-badge active" data-platform="rss">
+      <span class="platform-icon">&#9672;</span>
+      <span class="platform-name">RSS / Web</span>
+      <span class="platform-count">312</span>
+    </div>
+    <div class="platform-badge active" data-platform="threads">
+      <span class="platform-icon">@</span>
+      <span class="platform-name">Threads</span>
+      <span class="platform-count">235</span>
+    </div>
+  </div>
+</section>
+
+<section class="feed-section" id="feed">
+  <div class="section-header">
+    <h2 class="section-title">Recent <em>Intelligence</em></h2>
+    <span class="section-meta"><div class="live-dot"></div> Updated 2 min ago</span>
+  </div>
+  <div class="feed-layout">
+    <div class="feed-main" id="feed-main"></div>
+    <div class="feed-sidebar">
+      <div class="sidebar-widget">
+        <div class="widget-header">
+          <span class="widget-title">Active Keywords</span>
+          <span class="widget-count">183 total</span>
+        </div>
+        <div class="widget-body">
+          <div class="keyword-list">
+            <div class="keyword-row"><div><div class="keyword-text">telegram mini app</div><div class="keyword-cat">product &middot; contains</div></div><div class="keyword-hits">847</div></div>
+            <div class="keyword-row"><div><div class="keyword-text">TON wallet</div><div class="keyword-cat">crypto &middot; exact</div></div><div class="keyword-hits">623</div></div>
+            <div class="keyword-row"><div><div class="keyword-text">social poker</div><div class="keyword-cat">gaming &middot; contains</div></div><div class="keyword-hits">412</div></div>
+            <div class="keyword-row"><div><div class="keyword-text">liveops</div><div class="keyword-cat">product &middot; contains</div></div><div class="keyword-hits">298</div></div>
+            <div class="keyword-row"><div><div class="keyword-text">Telegram Stars</div><div class="keyword-cat">payments &middot; exact</div></div><div class="keyword-hits">187</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="sidebar-widget">
+        <div class="widget-header">
+          <span class="widget-title">Volume by Platform</span>
+          <span class="widget-count">today</span>
+        </div>
+        <div class="widget-body">
+          <div class="spark-row"><span class="spark-label">Twitter</span><div class="spark-bar-track"><div class="spark-bar amber" data-width="78"></div></div><span class="spark-val">78%</span></div>
+          <div class="spark-row"><span class="spark-label">Telegram</span><div class="spark-bar-track"><div class="spark-bar green" data-width="65"></div></div><span class="spark-val">65%</span></div>
+          <div class="spark-row"><span class="spark-label">Instagram</span><div class="spark-bar-track"><div class="spark-bar red" data-width="52"></div></div><span class="spark-val">52%</span></div>
+          <div class="spark-row"><span class="spark-label">YouTube</span><div class="spark-bar-track"><div class="spark-bar blue" data-width="41"></div></div><span class="spark-val">41%</span></div>
+          <div class="spark-row"><span class="spark-label">TikTok</span><div class="spark-bar-track"><div class="spark-bar amber" data-width="28"></div></div><span class="spark-val">28%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="pipeline-section" id="pipeline">
+  <div class="section-header">
+    <h2 class="section-title">Processing <em>Pipeline</em></h2>
+    <span class="section-meta">4 stages &middot; async</span>
+  </div>
+  <div class="pipeline-viz">
+    <div class="pipeline-stage">
+      <div class="stage-num">01 &middot;</div>
+      <div class="stage-name"><em>Fetch</em> &amp; Normalize</div>
+      <div class="stage-desc">Connectors fetch raw items; pipeline normalizes to unified ContentItem schema.</div>
+      <div class="stage-throughput">12,847</div>
+      <div class="stage-throughput-label">items total</div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="stage-num">02 &middot;</div>
+      <div class="stage-name"><em>Deduplicate</em></div>
+      <div class="stage-desc">SHA-256 URL hash deduplication eliminates cross-source duplicates automatically.</div>
+      <div class="stage-throughput">99.2%</div>
+      <div class="stage-throughput-label">dedup accuracy</div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="stage-num">03 &middot;</div>
+      <div class="stage-name"><em>Tag</em> &amp; Classify</div>
+      <div class="stage-desc">Keyword matching against active keyword library with category assignment.</div>
+      <div class="stage-throughput">183</div>
+      <div class="stage-throughput-label">active keywords</div>
+    </div>
+    <div class="pipeline-stage">
+      <div class="stage-num">04 &middot;</div>
+      <div class="stage-name"><em>Score</em> &amp; Rank</div>
+      <div class="stage-desc">Engagement snapshot scored with recency weighting. Items ranked by relevance signal.</div>
+      <div class="stage-throughput">0&ndash;100</div>
+      <div class="stage-throughput-label">score range</div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-logo">Socia Research</div>
+  <div class="footer-info">
+    Built on Cloudflare Workers &middot; Hono &middot; D1<br>
+    Connectors: Twitter/X &middot; YouTube &middot; Telegram &middot; Facebook &middot; Instagram &middot; TikTok &middot; RSS &middot; Threads
+  </div>
+  <div class="footer-status"><div class="live-dot"></div> All systems operational</div>
+</footer>
+
+<script>
+const terminalPlatforms = [
+  { label: '[twitter]  ', color: '#1da1f2' },
+  { label: '[telegram] ', color: '#2ca5e0' },
+  { label: '[youtube]  ', color: '#ff4444' },
+  { label: '[instagram]', color: '#e1306c' },
+  { label: '[tiktok]   ', color: '#69c9d0' },
+  { label: '[rss]      ', color: '#f5a623' },
+  { label: '[facebook] ', color: '#6099f8' },
+  { label: '[threads]  ', color: '#aaa' },
+];
+
+const sampleContent = [
+  'New Telegram Mini App poker tournament announced',
+  'TON wallet integration guide published',
+  'Social casino market report Q1 2026',
+  'LiveOps strategy for mobile gaming',
+  'Telegram Stars payment flow walkthrough',
+  'Poker hand history analysis tool',
+  'Web3 gaming retention mechanics deep dive',
+  'Daily active users spike: casino mini apps',
+  'VIP progression system design patterns',
+  'Referral loop optimization case study',
+  'Chip pack pricing A/B test results',
+  'Telegram bot for tournament notifications',
+];
+
+const tbody = document.getElementById('terminal-body');
+
+function addTerminalLine() {
+  const p = terminalPlatforms[Math.floor(Math.random() * terminalPlatforms.length)];
+  const c = sampleContent[Math.floor(Math.random() * sampleContent.length)];
+  const score = (Math.random() * 40 + 55).toFixed(1);
+  const now = new Date();
+  const ts = [now.getHours(), now.getMinutes(), now.getSeconds()].map(n => String(n).padStart(2,'0')).join(':');
+
+  const line = document.createElement('div');
+  line.className = 't-line';
+  line.innerHTML =
+    '<span class="t-prompt">' + ts + '</span>' +
+    '<span class="t-platform" style="color:' + p.color + '">' + p.label + '</span>' +
+    '<span class="t-content">' + c + '</span>' +
+    '<span class="t-score">' + score + '</span>';
+
+  tbody.appendChild(line);
+  const lines = tbody.querySelectorAll('.t-line');
+  if (lines.length > 18) {
+    lines[0].style.transition = 'opacity 0.3s';
+    lines[0].style.opacity = '0';
+    setTimeout(() => lines[0].remove(), 300);
+  }
+}
+
+for (let i = 0; i < 12; i++) setTimeout(addTerminalLine, i * 80);
+setInterval(addTerminalLine, 1800);
+
+function animateCounter(el) {
+  const target = parseInt(el.dataset.target);
+  const start = performance.now();
+  const duration = 1800;
+  (function update(now) {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.floor(ease * target).toLocaleString();
+    if (p < 1) requestAnimationFrame(update);
+  })(start);
+}
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.counter').forEach(animateCounter);
+      observer.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+document.querySelectorAll('.stats-grid').forEach(el => observer.observe(el));
+
+const barObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.querySelectorAll('.spark-bar').forEach(b => { b.style.width = b.dataset.width + '%'; });
+      barObserver.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.2 });
+
+document.querySelectorAll('.sidebar-widget').forEach(el => barObserver.observe(el));
+
+const feedItems = [
+  { rank:'01', platform:'telegram', label:'Telegram', source:'@cryptogaming_news', time:'4m ago', title:'Telegram Stars is now the default payment method for all gaming mini apps', excerpt:'Following the latest SDK update, mini app developers are required to integrate Stars as the primary payment flow.', tags:['trending','payments','telegram-mini-app'], score:94, scoreClass:'high', views:'284K', shares:'4.2K' },
+  { rank:'02', platform:'twitter', label:'Twitter/X', source:'@ton_blockchain', time:'12m ago', title:'TON wallet integration drops to under 3 lines of code with new SDK', excerpt:'The new TonConnect 3.0 SDK abstracts wallet connection into a single async hook.', tags:['crypto','developer','ton-wallet'], score:88, scoreClass:'', views:'156K', shares:'2.1K' },
+  { rank:'03', platform:'youtube', label:'YouTube', source:'Mobile Gaming Analytics', time:'28m ago', title:'How social poker apps retain 40% of D30 users — a deep dive', excerpt:'New analysis breaks down the retention mechanics of the top 5 social poker mini apps.', tags:['hot','research','poker','retention'], score:91, scoreClass:'high', views:'42K', shares:'891' },
+  { rank:'04', platform:'instagram', label:'Instagram', source:'@liveops_design', time:'1h ago', title:"Event-driven LiveOps: the weekly tournament cadence that won't burn players out", excerpt:'A product teardown of three leading mobile casino liveops calendars.', tags:['liveops','game-design'], score:76, scoreClass:'', views:'18K', shares:'340' },
+  { rank:'05', platform:'rss', label:'RSS', source:'Gaming Business Review', time:'2h ago', title:'VIP progression systems in social casinos: what drives tier upgrades', excerpt:'Research across 12 social casino titles shows visual prestige markers outperform raw chip rewards.', tags:['vip','monetization','research'], score:82, scoreClass:'', views:'9K', shares:'127' },
+  { rank:'06', platform:'tiktok', label:'TikTok', source:'@telegram_apps', time:'3h ago', title:'This Telegram poker app just hit 500K MAU in 60 days', excerpt:'Viral breakdown of how a Telegram mini app poker product acquired 500K monthly actives using organic sharing.', tags:['viral','growth','case-study'], score:89, scoreClass:'', views:'620K', shares:'18.4K' },
+];
+
+const feedContainer = document.getElementById('feed-main');
+feedItems.forEach(item => {
+  const el = document.createElement('div');
+  el.className = 'content-item';
+  el.dataset.platform = item.platform;
+  const tagsHtml = item.tags.map(t => '<span class="tag ' + (t==='hot'?'hot':t==='trending'?'trending':'') + '">' + t + '</span>').join('');
+  el.innerHTML =
+    '<div class="item-rank">' + item.rank + '</div>' +
+    '<div class="item-body">' +
+      '<div class="item-meta">' +
+        '<span class="item-platform-tag ' + item.platform + '">' + item.label + '</span>' +
+        '<span class="item-source">' + item.source + '</span>' +
+        '<span class="item-time">' + item.time + '</span>' +
+      '</div>' +
+      '<div class="item-title">' + item.title + '</div>' +
+      '<div class="item-excerpt">' + item.excerpt + '</div>' +
+      '<div class="item-tags">' + tagsHtml + '</div>' +
+    '</div>' +
+    '<div class="item-score-col">' +
+      '<div class="score-badge ' + item.scoreClass + '">' + item.score + '</div>' +
+      '<div class="score-label">Score</div>' +
+      '<div class="engagement-mini">' +
+        '<div class="eng-row">&#128065; ' + item.views + '</div>' +
+        '<div class="eng-row">&#8599; ' + item.shares + '</div>' +
+      '</div>' +
+    '</div>';
+  feedContainer.appendChild(el);
+});
+</script>
+</body>
+</html>`;

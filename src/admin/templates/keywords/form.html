@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if keyword else 'New' }} Keyword - Socia Research{% endblock %}
+{% block content %}
+<h2>{{ 'Edit' if keyword else 'New' }} Keyword</h2>
+
+<form method="post" action="/admin/keywords/{{ keyword.id + '/edit' if keyword else 'new' }}" style="max-width: 500px;">
+    <div class="form-group">
+        <label>Keyword</label>
+        <input type="text" name="keyword" value="{{ keyword.keyword if keyword else '' }}" required>
+    </div>
+
+    <div class="form-group">
+        <label>Category</label>
+        <input type="text" name="category" value="{{ keyword.category if keyword else 'general' }}" placeholder="general, competitor, product...">
+    </div>
+
+    <div class="form-group">
+        <label>Match Mode</label>
+        <select name="match_mode">
+            {% for mm in match_modes %}
+            <option value="{{ mm }}" {% if keyword and keyword.match_mode == mm %}selected{% endif %}>{{ mm }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% if keyword %}
+    <div class="form-group">
+        <div class="checkbox-group">
+            <input type="checkbox" name="is_active" value="true" id="is_active" {% if keyword.is_active %}checked{% endif %}>
+            <label for="is_active" style="margin-bottom:0">Active</label>
+        </div>
+    </div>
+    {% endif %}
+
+    <div style="display:flex; gap:0.75rem; margin-top:1.5rem;">
+        <button type="submit" class="btn btn-primary">{{ 'Update' if keyword else 'Create' }}</button>
+        <a href="/admin/keywords" class="btn btn-outline">Cancel</a>
+    </div>
+</form>
+{% endblock %}

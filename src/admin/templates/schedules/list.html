@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Schedules - Socia Research{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <h2>Schedules</h2>
+    <a href="/admin/schedules/new" class="btn btn-primary">+ Add Schedule</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Source</th>
+            <th>Cron Expression</th>
+            <th>Status</th>
+            <th>Last Run</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in schedules %}
+        <tr>
+            <td><strong>{{ row.source.name if row.source else 'Unknown' }}</strong></td>
+            <td><code>{{ row.schedule.cron_expression }}</code></td>
+            <td>
+                {% if row.schedule.is_active %}
+                <span class="badge badge-success">active</span>
+                {% else %}
+                <span class="badge badge-muted">inactive</span>
+                {% endif %}
+            </td>
+            <td>{{ row.schedule.last_run_at.strftime('%m/%d %H:%M') if row.schedule.last_run_at else 'Never' }}</td>
+            <td class="actions">
+                <a href="/admin/schedules/{{ row.schedule.id }}/edit" class="btn btn-sm btn-outline">Edit</a>
+                <form method="post" action="/admin/schedules/{{ row.schedule.id }}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                    <button class="btn btn-sm btn-danger" type="submit">Del</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not schedules %}
+        <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No schedules configured yet</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

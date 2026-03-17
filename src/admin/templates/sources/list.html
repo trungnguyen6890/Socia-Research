@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Sources - Socia Research{% endblock %}
+{% block content %}
+<div class="toolbar">
+    <h2>Sources</h2>
+    <a href="/admin/sources/new" class="btn btn-primary">+ Add Source</a>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Mode</th>
+            <th>URL / Handle</th>
+            <th>Priority</th>
+            <th>Status</th>
+            <th>Last Fetch</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for source in sources %}
+        <tr>
+            <td><strong>{{ source.name }}</strong></td>
+            <td><span class="badge badge-info">{{ source.connector_type }}</span></td>
+            <td><span class="badge badge-muted">{{ source.source_mode }}</span></td>
+            <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ source.url_or_handle }}</td>
+            <td>{{ source.priority }}</td>
+            <td>
+                {% if source.is_active %}
+                <span class="badge badge-success">active</span>
+                {% else %}
+                <span class="badge badge-muted">inactive</span>
+                {% endif %}
+            </td>
+            <td>{{ source.last_fetched_at.strftime('%m/%d %H:%M') if source.last_fetched_at else 'Never' }}</td>
+            <td class="actions">
+                <a href="/admin/sources/{{ source.id }}/edit" class="btn btn-sm btn-outline">Edit</a>
+                <form method="post" action="/admin/sources/{{ source.id }}/toggle" style="display:inline">
+                    <button class="btn btn-sm btn-outline" type="submit">{{ 'Disable' if source.is_active else 'Enable' }}</button>
+                </form>
+                <form method="post" action="/admin/sources/{{ source.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this source?')">
+                    <button class="btn btn-sm btn-danger" type="submit">Del</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        {% if not sources %}
+        <tr><td colspan="8" style="text-align:center; color:var(--text-muted);">No sources configured yet</td></tr>
+        {% endif %}
+    </tbody>
+</table>
+{% endblock %}

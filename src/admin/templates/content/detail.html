@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Content Detail - Socia Research{% endblock %}
+{% block content %}
+<div style="margin-bottom: 1rem;">
+    <a href="/admin/content" class="btn btn-sm btn-outline">Back to Content</a>
+</div>
+
+{% if item %}
+<h2>{{ item.title or 'Untitled Content' }}</h2>
+
+<div class="detail-grid">
+    <div class="detail-card">
+        <h3>Metadata</h3>
+        <p><strong>Source:</strong> {{ source.name if source else item.source_id }}</p>
+        <p><strong>Connector:</strong> <span class="badge badge-info">{{ item.connector_type }}</span></p>
+        <p><strong>URL:</strong> <a href="{{ item.url }}" target="_blank">{{ item.url }}</a></p>
+        <p><strong>Published:</strong> {{ item.publish_time.strftime('%Y-%m-%d %H:%M UTC') if item.publish_time else 'Unknown' }}</p>
+        <p><strong>Fetched:</strong> {{ item.fetch_time.strftime('%Y-%m-%d %H:%M UTC') if item.fetch_time else '-' }}</p>
+    </div>
+
+    <div class="detail-card">
+        <h3>Scores</h3>
+        <p>
+            <strong>Quality:</strong>
+            <span class="score-bar" style="width:80px"><span class="score-bar-fill" style="width:{{ (item.quality_score * 100)|int }}%"></span></span>
+            {{ '%.3f'|format(item.quality_score) }}
+        </p>
+        <p>
+            <strong>Signal:</strong>
+            <span class="score-bar" style="width:80px"><span class="score-bar-fill" style="width:{{ (item.signal_score * 100)|int }}%"></span></span>
+            {{ '%.3f'|format(item.signal_score) }}
+        </p>
+        <p><strong>Duplicate:</strong> {% if item.is_duplicate %}<span class="badge badge-warning">Yes</span>{% else %}<span class="badge badge-success">No</span>{% endif %}</p>
+        <p><strong>Content Hash:</strong> <code style="font-size:0.75rem">{{ item.content_hash[:16] if item.content_hash else '-' }}...</code></p>
+    </div>
+
+    <div class="detail-card">
+        <h3>Tags</h3>
+        {% for tag in item.tags %}
+        <span class="badge badge-info" style="margin:0.15rem">{{ tag }}</span>
+        {% endfor %}
+        {% if not item.tags %}
+        <span style="color:var(--text-muted)">No tags</span>
+        {% endif %}
+    </div>
+
+    <div class="detail-card">
+        <h3>Engagement</h3>
+        {% if item.engagement_snapshot %}
+        {% for key, val in item.engagement_snapshot.items() %}
+        <p><strong>{{ key }}:</strong> {{ val }}</p>
+        {% endfor %}
+        {% else %}
+        <span style="color:var(--text-muted)">No engagement data</span>
+        {% endif %}
+    </div>
+
+    <div class="detail-card detail-full">
+        <h3>Content</h3>
+        <div style="white-space: pre-wrap; line-height: 1.7;">{{ item.text_content or 'No text content' }}</div>
+    </div>
+
+    <div class="detail-card detail-full">
+        <h3>Raw Data</h3>
+        <pre>{{ item.raw_data | tojson(indent=2) if item.raw_data else '{}' }}</pre>
+    </div>
+</div>
+
+{% else %}
+<p style="color:var(--text-muted)">Content item not found.</p>
+{% endif %}
+{% endblock %}
