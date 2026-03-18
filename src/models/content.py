@@ -33,3 +33,9 @@ class ContentItem(Base):
     quality_score: Mapped[float] = mapped_column(Float, default=0.0)
     signal_score: Mapped[float] = mapped_column(Float, default=0.0)
     raw_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Enrichment fields
+    content_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    author_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    has_media: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_truncated: Mapped[bool] = mapped_column(Boolean, default=False)

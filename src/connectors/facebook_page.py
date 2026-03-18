@@ -78,4 +78,7 @@ class FacebookPageConnector(BaseConnector):
                 "comments": raw_item.get("comments", 0),
             },
             raw_data=raw_item,
+            content_type="post",
+            author_name=self.source.name,
+            has_media=False,
         )

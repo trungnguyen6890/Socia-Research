@@ -86,4 +86,7 @@ class XTwitterConnector(BaseConnector):
                 "impressions": metrics.get("impression_count", 0),
             } if metrics else None,
             raw_data=raw_item,
+            content_type="tweet",
+            author_name=username,
+            has_media=False,
         )

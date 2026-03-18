@@ -6,7 +6,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from src.config.settings import get_settings, RateLimitConfig
+from src.config.settings import get_settings
 from src.models.schedule import Schedule
 from src.models.source import Source
 from src.scheduler.jobs import run_source_job

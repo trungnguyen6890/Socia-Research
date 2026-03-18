@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +12,6 @@ from src.models.content import ContentItem
 from src.models.run_log import RunLog
 from src.models.source import Source
 from src.utils.time_utils import utc_now
-from datetime import timedelta
 
 router = APIRouter()
 

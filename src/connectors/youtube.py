@@ -112,4 +112,7 @@ class YouTubeConnector(BaseConnector):
                 "comments": int(stats.get("commentCount", 0)),
             } if stats else None,
             raw_data=raw_item,
+            content_type="video",
+            author_name=raw_item.get("channel_title"),
+            has_media=True,
         )

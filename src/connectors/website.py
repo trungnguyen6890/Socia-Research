@@ -9,7 +9,6 @@ from src.config.constants import ConnectorType
 from src.connectors.base import BaseConnector, ContentItemCreate, FetchResult
 from src.connectors.registry import register_connector
 from src.utils.hashing import canonicalize_url
-from src.utils.time_utils import utc_now
 
 
 @register_connector(ConnectorType.WEBSITE)
@@ -73,6 +72,8 @@ class WebsiteConnector(BaseConnector):
             publish_time=raw_item.get("time"),
             engagement_snapshot=None,
             raw_data=raw_item,
+            content_type="article",
+            has_media=False,
         )
 
     def _extract_item(self, node: Any, base_url: str) -> dict[str, Any]:

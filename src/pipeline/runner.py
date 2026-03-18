@@ -8,7 +8,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.constants import WATCH_ONLY_CONNECTORS, RunStatus
-from src.connectors.base import ContentItemCreate
 from src.connectors.registry import get_connector
 from src.models.content import ContentItem
 from src.models.goal import Goal

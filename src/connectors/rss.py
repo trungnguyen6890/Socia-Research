@@ -8,7 +8,6 @@ from src.config.constants import ConnectorType
 from src.connectors.base import BaseConnector, ContentItemCreate, FetchResult
 from src.connectors.registry import register_connector
 from src.utils.hashing import canonicalize_url
-from src.utils.time_utils import utc_now
 
 
 @register_connector(ConnectorType.RSS)
@@ -66,6 +65,9 @@ class RSSConnector(BaseConnector):
             publish_time=raw_item.get("published"),
             engagement_snapshot=None,
             raw_data=raw_item,
+            content_type="article",
+            author_name=raw_item.get("author"),
+            has_media=False,
         )
 
     @staticmethod

@@ -80,4 +80,7 @@ class TelegramConnector(BaseConnector):
                 "replies": raw_item.get("replies", 0),
             },
             raw_data=raw_item,
+            content_type="message",
+            author_name=channel,
+            has_media=raw_item.get("media_type") is not None,
         )

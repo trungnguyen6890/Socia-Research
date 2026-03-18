@@ -30,6 +30,10 @@ class ContentItemCreate:
     engagement_snapshot: dict[str, Any] | None = None
     raw_data: dict[str, Any] | None = None
     canonical_url: str | None = None
+    # Enrichment fields
+    content_type: str | None = None
+    author_name: str | None = None
+    has_media: bool = False
 
 
 class BaseConnector(ABC):

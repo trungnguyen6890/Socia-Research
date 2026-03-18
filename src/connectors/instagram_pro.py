@@ -65,6 +65,7 @@ class InstagramProConnector(BaseConnector):
 
     def normalize(self, raw_item: dict[str, Any]) -> ContentItemCreate:
         url = raw_item.get("permalink", "")
+        media_type = raw_item.get("media_type", "")
         return ContentItemCreate(
             url=url,
             canonical_url=canonicalize_url(url) if url else None,
@@ -75,7 +76,9 @@ class InstagramProConnector(BaseConnector):
             engagement_snapshot={
                 "likes": raw_item.get("like_count", 0),
                 "comments": raw_item.get("comments_count", 0),
-                "media_type": raw_item.get("media_type", ""),
             },
             raw_data=raw_item,
+            content_type="post",
+            author_name=self.source.url_or_handle,
+            has_media=media_type in ("IMAGE", "VIDEO", "CAROUSEL_ALBUM"),
         )
