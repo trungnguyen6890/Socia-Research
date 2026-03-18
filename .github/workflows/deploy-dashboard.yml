@@ -1,12 +1,12 @@
-name: Deploy Worker
+name: Deploy Dashboard
 
 on:
   push:
     branches:
       - main
     paths:
-      - 'cloudflare/**'
-      - '.github/workflows/deploy.yml'
+      - 'dashboard/**'
+      - '.github/workflows/deploy-dashboard.yml'
 
 jobs:
   deploy:
@@ -14,16 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cloudflare
+        working-directory: dashboard
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: cloudflare/package-lock.json
+          cache-dependency-path: dashboard/package-lock.json
       - run: npm ci
-      - run: npx wrangler deploy
+      - run: npm run build
+      - run: npx wrangler pages deploy out --project-name socia-dashboard --commit-dirty=true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
