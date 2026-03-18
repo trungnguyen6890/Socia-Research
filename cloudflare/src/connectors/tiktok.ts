@@ -1,5 +1,6 @@
 import { BaseConnector } from './base';
 import { launchBrowser } from '../browser';
+import { getStealthScript } from '../stealth';
 import { FetchResult, RawItem } from '../types';
 
 /**
@@ -123,9 +124,12 @@ export class TikTokConnector extends BaseConnector {
       );
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
 
-      // Hook Response.prototype.json BEFORE navigation to capture video list API responses.
-      // TikTok streams XHR body (CDP/page.on('response') returns empty), but this hook
-      // intercepts the data when TikTok's own JS calls response.json().
+      // Apply stealth patches to bypass TikTok's headless browser detection.
+      // Without these, TikTok serves the page but never triggers the video list API.
+      await page.evaluateOnNewDocument(getStealthScript());
+
+      // Hook Response.prototype.json to capture video list API responses.
+      // TikTok streams XHR body so CDP/page.on('response') returns empty.
       await page.evaluateOnNewDocument(() => {
         const origJson = Response.prototype.json;
         (window as Record<string, unknown>)['__ttVideos'] = [];
