@@ -156,14 +156,21 @@ export class TikTokConnector extends BaseConnector {
         await new Promise(r => setTimeout(r, 2500));
       }
 
-      const videos = await page.evaluate(
+      const allVideos = await page.evaluate(
         () => (window as Record<string, unknown>)['__ttVideos'] as TikTokVideo[]
       );
 
-      console.log(`tiktok browser @${username}: title="${title}", captured=${videos?.length ?? 0} videos via Response.json hook`);
+      // Filter to only videos from the target user — the hook captures ALL itemList
+      // responses on the page, including related/suggested videos from other accounts.
+      const lowerUser = username.toLowerCase();
+      const videos = (allVideos ?? []).filter(v =>
+        !v.author?.uniqueId || v.author.uniqueId.toLowerCase() === lowerUser
+      );
 
-      if (!videos?.length) {
-        throw new Error(`TikTok: 0 videos for @${username} (title="${title}")`);
+      console.log(`tiktok browser @${username}: title="${title}", captured=${allVideos?.length ?? 0} total, ${videos.length} from @${username}`);
+
+      if (!videos.length) {
+        throw new Error(`TikTok: 0 videos for @${username} (title="${title}", total captured=${allVideos?.length ?? 0})`);
       }
 
       return this.convertVideos(videos, username, sinceCursor);
@@ -179,8 +186,11 @@ export class TikTokConnector extends BaseConnector {
     let latestId: string | null = null;
     const maxResults = this.maxResults();
 
+    const lowerUser = username.toLowerCase();
     for (const video of videos) {
       if (!video.id) continue;
+      // Skip videos from other users (can appear in suggested/related API responses)
+      if (video.author?.uniqueId && video.author.uniqueId.toLowerCase() !== lowerUser) continue;
       if (rawItems.length >= maxResults) break;
       if (sinceCursor && video.id === sinceCursor) break;
       if (!latestId) latestId = video.id;
