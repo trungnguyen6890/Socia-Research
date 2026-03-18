@@ -6,18 +6,15 @@ import { FetchResult, RawItem } from '../types';
  * Facebook Page via Cloudflare Browser Rendering.
  *
  * Strategy waterfall (auto):
- *   1. mbasic.facebook.com  — no-JS, fast, works for most public pages without cookies
- *   2. www.facebook.com     — full SPA, requires FB_COOKIES session cookies
+ *   1. mbasic.facebook.com  — lightweight HTML, public pages often work without cookies
+ *   2. www.facebook.com     — SPA, requires FB_COOKIES session cookies
  *
- * FB_COOKIES (optional for public pages, required for private/restricted):
+ * FB_COOKIES (optional for public pages):
  *   JSON array:  [{"name":"c_user","value":"..."},{"name":"xs","value":"..."}]
- *   Cookie str:  "c_user=123; xs=abc; datr=xyz"
  *   Set via:     wrangler secret put FB_COOKIES
  *
- * source.url_or_handle — page slug, numeric ID, or full facebook.com URL
- *
  * config keys:
- *   max_results   — max posts to fetch (default: 10)
+ *   max_results   — max posts (default: 10)
  *   lookback_days — ignore posts older than N days (default: 3)
  *   strategy      — "mbasic" | "full" | "auto" (default: "auto")
  */
@@ -34,25 +31,15 @@ export class FacebookBrowserConnector extends BaseConnector {
     return h;
   }
 
-  /** Parse FB_COOKIES secret into puppeteer CookieParam array */
   private parseCookies(): Array<{ name: string; value: string; domain: string; path: string }> {
     const raw = this.env.FB_COOKIES?.trim();
     if (!raw) return [];
-
-    // Try JSON array format first: [{"name":"c_user","value":"..."},...]
     if (raw.startsWith('[')) {
       try {
         const arr = JSON.parse(raw) as Array<{ name: string; value: string; domain?: string; path?: string }>;
-        return arr.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain ?? '.facebook.com',
-          path: c.path ?? '/',
-        }));
-      } catch { /* fall through to string parse */ }
+        return arr.map(c => ({ name: c.name, value: c.value, domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }));
+      } catch { /* fall through */ }
     }
-
-    // Cookie string format: "c_user=123; xs=abc; datr=xyz"
     return raw.split(';').flatMap(pair => {
       const [name, ...rest] = pair.trim().split('=');
       const value = rest.join('=').trim();
@@ -71,40 +58,32 @@ export class FacebookBrowserConnector extends BaseConnector {
 
     try {
       const page = await browser.newPage();
-
-      // Mobile Chrome UA — lighter rendering, closer to what real users send
       await page.setUserAgent(
         'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.6367.82 Mobile Safari/537.36'
       );
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
-
-      // Inject session cookies if available (no-op if empty)
       if (cookies.length > 0) await page.setCookie(...cookies);
 
       if (strategy === 'full') {
-        if (cookies.length === 0) throw new Error(
-          'strategy="full" requires FB_COOKIES — set via: wrangler secret put FB_COOKIES'
-        );
-        return await this.scrapeFullSite(page, handle, sinceCursor, cookies.length > 0);
+        if (cookies.length === 0) throw new Error('strategy="full" requires FB_COOKIES');
+        return await this.scrapeFullSite(page, handle, sinceCursor, !!cookies.length);
       }
 
-      // auto / mbasic: always try mbasic first (works for public pages without cookies)
-      const mbasicResult = await this.tryMbasic(page, handle, sinceCursor, cookies.length > 0);
+      // auto / mbasic: try mbasic first
+      const mbasicResult = await this.tryMbasic(page, handle, sinceCursor, !!cookies.length);
       if (mbasicResult !== null) return mbasicResult;
 
       if (strategy === 'mbasic') {
         throw new Error(
-          cookies.length === 0
-            ? `mbasic returned 0 posts for "${handle}". Page may require login — set FB_COOKIES secret.`
-            : `mbasic returned 0 posts for "${handle}". Try strategy="full" in source config.`
+          `mbasic returned 0 posts for "${handle}". ` +
+          (cookies.length === 0 ? 'Set FB_COOKIES or try strategy="full".' : 'Try strategy="full".')
         );
       }
 
-      // auto fallback to full site — requires cookies
       if (cookies.length === 0) {
         throw new Error(
           `mbasic.facebook.com returned no posts for "${handle}" without authentication. ` +
-          'For private/restricted pages, set FB_COOKIES secret with your session cookies.'
+          'Set FB_COOKIES secret with your session cookies.'
         );
       }
 
@@ -131,21 +110,20 @@ export class FacebookBrowserConnector extends BaseConnector {
 
       const pageState = await page.evaluate(() => ({
         isLoginPage: !!document.querySelector('#login_form, #loginbutton, [name="login"], [data-sigil="m_login_button"]'),
-        hasStories: !!document.querySelector('[data-ft]'),
-        postCount: document.querySelectorAll('[data-ft]').length,
+        dataFtCount: document.querySelectorAll('[data-ft]').length,
+        articleCount: document.querySelectorAll('article').length,
         title: document.title,
-        url: window.location.href,
+        bodySnippet: document.body.innerHTML.slice(0, 500),
       }));
 
+      console.log(`mbasic "${handle}": login=${pageState.isLoginPage}, data-ft=${pageState.dataFtCount}, article=${pageState.articleCount}, title="${pageState.title}"`);
+
       if (pageState.isLoginPage) {
-        if (hasCookies) {
-          throw new Error(
-            `Session cookies rejected by mbasic.facebook.com for "${handle}". ` +
-            'Cookies may have expired — re-extract from your browser and update FB_COOKIES.'
-          );
-        }
-        // No cookies + login wall → let caller decide
-        console.log(`mbasic: login required for "${handle}" (no cookies)`);
+        if (hasCookies) throw new Error(
+          `Session cookies rejected by mbasic.facebook.com for "${handle}". ` +
+          'Cookies may have expired — re-extract and update FB_COOKIES.'
+        );
+        console.log(`mbasic: login wall without cookies for "${handle}"`);
         return null;
       }
 
@@ -155,20 +133,36 @@ export class FacebookBrowserConnector extends BaseConnector {
           likes: number; comments: number; shares: number;
         }> = [];
 
-        const containers = Array.from(document.querySelectorAll<HTMLElement>('div[data-ft]'));
+        // Primary: data-ft containers (standard mbasic posts)
+        let containers = Array.from(document.querySelectorAll<HTMLElement>('div[data-ft]'));
+
+        // Fallback: article elements
+        if (containers.length === 0) {
+          containers = Array.from(document.querySelectorAll<HTMLElement>('article'));
+        }
+
+        // Fallback 2: divs with story links
+        if (containers.length === 0) {
+          containers = Array.from(document.querySelectorAll<HTMLElement>(
+            'div:has(a[href*="/posts/"]), div:has(a[href*="/permalink/"])'
+          ));
+        }
 
         for (const el of containers) {
-          // Only keep story posts
-          try {
-            const ft = JSON.parse(el.getAttribute('data-ft') ?? '{}');
-            if (!ft.mf_story_key && !ft.content_owner_id_new && !ft.story_attachment_style) continue;
-          } catch { continue; }
+          // Filter: must be a story post (data-ft check)
+          if (el.hasAttribute('data-ft')) {
+            try {
+              const ft = JSON.parse(el.getAttribute('data-ft') ?? '{}');
+              if (!ft.mf_story_key && !ft.content_owner_id_new && !ft.story_attachment_style) continue;
+            } catch { continue; }
+          }
 
-          const storyBody = el.querySelector('.story_body_container');
-          const text = (storyBody?.textContent ?? '').trim();
+          // Extract text from story body or full element
+          const bodyEl = el.querySelector('.story_body_container') ?? el;
+          const text = (bodyEl.textContent ?? '').trim();
           if (!text || text.length < 10) continue;
 
-          // Post URL
+          // Post URL: prefer permalink > posts > story
           const linkEl = el.querySelector<HTMLAnchorElement>(
             'a[href*="/permalink/"], a[href*="/posts/"], a[href*="/story/"]'
           );
@@ -178,21 +172,20 @@ export class FacebookBrowserConnector extends BaseConnector {
             ? rawHref.split('?')[0]
             : `https://www.facebook.com${rawHref.split('?')[0]}`;
 
-          // Timestamp via data-utime attribute on <abbr>
+          // Timestamp
           const abbr = el.querySelector<HTMLElement>('abbr[data-utime]');
           const utime = abbr ? Number(abbr.getAttribute('data-utime')) : null;
           const timestamp = utime && !isNaN(utime) ? new Date(utime * 1000).toISOString() : null;
-
           if (sinceTs && timestamp && timestamp <= sinceTs) continue;
 
-          // Engagement from footer links
+          // Engagement
           let likes = 0, comments = 0, shares = 0;
           el.querySelectorAll<HTMLAnchorElement>('footer a').forEach(a => {
             const txt = a.textContent?.trim() ?? '';
             const num = parseInt(txt.replace(/[^\d]/g, ''), 10) || 0;
             const href = a.getAttribute('href') ?? '';
-            if (href.includes('reaction') || /^\d+\s*(like|lượt thích)/i.test(txt)) likes = num;
-            else if (href.includes('comment') || /comment/i.test(href)) comments = num;
+            if (href.includes('reaction') || /lượt thích|like/i.test(txt)) likes = num;
+            else if (href.includes('comment')) comments = num;
             else if (href.includes('share')) shares = num;
           });
 
@@ -203,21 +196,20 @@ export class FacebookBrowserConnector extends BaseConnector {
       }, sinceCursor);
 
       if (!posts || posts.length === 0) {
-        console.log(`mbasic: 0 posts for "${handle}" (dataFtCount=${pageState.postCount}, title="${pageState.title}")`);
+        console.log(`mbasic: 0 valid posts extracted for "${handle}"`);
         return null;
       }
 
       return this.convertPosts(posts, sinceCursor);
     } catch (err) {
-      // Re-throw cookie/auth errors — don't silently swallow them
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('cookies') || msg.includes('Cookies') || msg.includes('rejected')) throw err;
+      if (msg.includes('cookies') || msg.includes('rejected')) throw err;
       console.log(`mbasic failed for "${handle}": ${msg}`);
       return null;
     }
   }
 
-  // ─── Strategy 2: www.facebook.com (requires cookies) ─────────────────────
+  // ─── Strategy 2: www.facebook.com ─────────────────────────────────────────
 
   private async scrapeFullSite(
     page: import('@cloudflare/puppeteer').Page,
@@ -229,25 +221,54 @@ export class FacebookBrowserConnector extends BaseConnector {
       waitUntil: 'networkidle2',
       timeout: 30000,
     });
-    await new Promise(r => setTimeout(r, 3000));
+
+    // Dismiss any modal dialogs (cookie consent, login prompt overlays)
+    await page.evaluate(() => {
+      const selectors = [
+        '[aria-label="Close"]', '[aria-label="Đóng"]',
+        '[data-testid="cookie-policy-manage-dialog-accept-button"]',
+        'button[title="Allow all cookies"]',
+      ];
+      for (const sel of selectors) {
+        (document.querySelector(sel) as HTMLElement | null)?.click();
+      }
+    });
+    await new Promise(r => setTimeout(r, 1500));
+
+    // Wait for articles to render (lazy loaded)
+    await page.waitForSelector('[role="article"], [data-pagelet*="FeedUnit"]', { timeout: 12000 })
+      .catch(() => console.log(`full site: waitForSelector timeout for "${handle}"`));
+
+    // Scroll to trigger lazy loading
+    await page.evaluate(() => window.scrollBy(0, 600));
+    await new Promise(r => setTimeout(r, 2000));
 
     const pageState = await page.evaluate(() => ({
-      isLoginPage: !!document.querySelector('[data-testid="royal_login_form"]') ||
+      isLoginPage:
+        !!document.querySelector('[data-testid="royal_login_form"]') ||
         document.title.toLowerCase().includes('log in') ||
-        document.title.toLowerCase().includes('đăng nhập'),
-      postCount: document.querySelectorAll('[role="article"]').length,
+        document.title.toLowerCase().includes('đăng nhập') ||
+        !!document.querySelector('form[action*="login"]'),
+      articleCount: document.querySelectorAll('[role="article"]').length,
+      feedUnitCount: document.querySelectorAll('[data-pagelet*="FeedUnit"]').length,
       title: document.title,
     }));
+
+    console.log(`full site "${handle}": login=${pageState.isLoginPage}, articles=${pageState.articleCount}, feedUnits=${pageState.feedUnitCount}, title="${pageState.title}"`);
 
     if (pageState.isLoginPage) {
       throw new Error(
         `Cookies rejected on www.facebook.com for "${handle}". ` +
-        'Cookies may have expired — re-extract from your browser and update FB_COOKIES.'
+        'Re-extract cookies from your browser and run: wrangler secret put FB_COOKIES'
       );
     }
 
-    if (pageState.postCount === 0) {
-      throw new Error(`facebook.com: 0 articles found for "${handle}". Title: "${pageState.title}"`);
+    const totalFound = pageState.articleCount + pageState.feedUnitCount;
+    if (totalFound === 0) {
+      throw new Error(
+        `facebook.com: 0 posts found for "${handle}" (title="${pageState.title}"). ` +
+        'Page may require login or uses unsupported layout — set FB_COOKIES or try strategy="mbasic".'
+      );
     }
 
     const posts = await page.evaluate((sinceTs: string | null) => {
@@ -256,42 +277,54 @@ export class FacebookBrowserConnector extends BaseConnector {
         likes: number; comments: number; shares: number;
       }> = [];
 
-      document.querySelectorAll<HTMLElement>('[role="article"]').forEach(el => {
-        if ((el.getAttribute('aria-label') ?? '').toLowerCase().includes('sponsored')) return;
+      // Try article[role="article"] first, then data-pagelet feed units
+      const articleEls = Array.from(document.querySelectorAll<HTMLElement>(
+        '[role="article"], [data-pagelet*="FeedUnit"]'
+      ));
 
-        // Try multiple text extraction selectors (FB changes DOM often)
-        const textEl = el.querySelector<HTMLElement>(
-          '[data-ad-preview="message"], [dir="auto"], [data-testid="post_message"]'
-        );
+      for (const el of articleEls) {
+        // Skip sponsored
+        const ariaLabel = el.getAttribute('aria-label') ?? '';
+        if (/sponsored|tài trợ/i.test(ariaLabel)) continue;
+
+        // Text extraction — try multiple selectors (FB changes DOM often)
+        const textCandidates = [
+          el.querySelector<HTMLElement>('[data-ad-preview="message"]'),
+          el.querySelector<HTMLElement>('[data-testid="post_message"]'),
+          el.querySelector<HTMLElement>('[dir="auto"]'),
+          el.querySelector<HTMLElement>('[class*="userContent"]'),
+        ];
+        const textEl = textCandidates.find(e => e && (e.innerText ?? e.textContent ?? '').trim().length > 10);
         const text = (textEl?.innerText ?? textEl?.textContent ?? '').trim();
-        if (!text || text.length < 10) return;
+        if (!text || text.length < 10) continue;
 
+        // Post URL
         let postUrl = '';
         for (const a of el.querySelectorAll<HTMLAnchorElement>('a[href]')) {
           const h = a.getAttribute('href') ?? '';
-          if (h.includes('/posts/') || h.includes('/permalink/')) {
+          if (h.includes('/posts/') || h.includes('/permalink/') || h.includes('/story/')) {
             postUrl = h.startsWith('http') ? h.split('?')[0] : `https://www.facebook.com${h.split('?')[0]}`;
             break;
           }
         }
-        if (!postUrl) return;
+        if (!postUrl) continue;
 
+        // Timestamp
         const timeEl = el.querySelector<HTMLElement>('time[datetime]');
         const timestamp = timeEl?.getAttribute('datetime') ?? null;
-        if (sinceTs && timestamp && timestamp <= sinceTs) return;
+        if (sinceTs && timestamp && timestamp <= sinceTs) continue;
 
-        // Engagement — aria-label on reaction buttons
-        const likeBtn = el.querySelector<HTMLElement>('[aria-label*="reaction"], [aria-label*="Like"]');
-        const likes = parseInt((likeBtn?.getAttribute('aria-label') ?? '').replace(/[^\d]/g, '') || '0', 10);
-
-        results.push({ text, url: postUrl, timestamp, likes, comments: 0, shares: 0 });
-      });
+        results.push({ text, url: postUrl, timestamp, likes: 0, comments: 0, shares: 0 });
+      }
 
       return results;
     }, sinceCursor);
 
     if (!posts || posts.length === 0) {
-      throw new Error(`facebook.com: extracted 0 posts from ${pageState.postCount} articles for "${handle}"`);
+      throw new Error(
+        `facebook.com: found ${totalFound} post containers for "${handle}" but could not extract text/URL. ` +
+        'FB may have changed its DOM structure.'
+      );
     }
 
     return this.convertPosts(posts, sinceCursor);
@@ -300,10 +333,7 @@ export class FacebookBrowserConnector extends BaseConnector {
   // ─── Shared conversion ─────────────────────────────────────────────────────
 
   private convertPosts(
-    posts: Array<{
-      text: string; url: string; timestamp: string | null;
-      likes: number; comments: number; shares: number;
-    }>,
+    posts: Array<{ text: string; url: string; timestamp: string | null; likes: number; comments: number; shares: number }>,
     sinceCursor: string | null,
   ): FetchResult {
     const rawItems: RawItem[] = [];
@@ -316,7 +346,6 @@ export class FacebookBrowserConnector extends BaseConnector {
       if (rawItems.length >= maxResults) break;
       if (sinceCursor && post.timestamp && post.timestamp <= sinceCursor) break;
       if (post.timestamp && new Date(post.timestamp).getTime() < cutoffMs) continue;
-
       if (!latestTimestamp && post.timestamp) latestTimestamp = post.timestamp;
 
       rawItems.push({
@@ -327,11 +356,7 @@ export class FacebookBrowserConnector extends BaseConnector {
         contentType: 'post',
         authorName: this.source.name,
         hasMedia: false,
-        engagementSnapshot: {
-          likes: post.likes,
-          comments: post.comments,
-          shares: post.shares,
-        },
+        engagementSnapshot: { likes: post.likes, comments: post.comments, shares: post.shares },
       });
     }
 
