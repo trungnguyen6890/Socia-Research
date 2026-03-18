@@ -123,16 +123,39 @@ export class TikTokConnector extends BaseConnector {
       );
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
 
+      // Intercept TikTok video list API responses BEFORE navigation
+      const capturedVideos: TikTokVideo[] = [];
+      page.on('response', async (response) => {
+        const url = response.url();
+        if (url.includes('/api/post/item_list/') || url.includes('/aweme/v1/aweme/post/')) {
+          try {
+            const json = await response.json() as Record<string, unknown>;
+            const items = (json['itemList'] ?? json['aweme_list']) as TikTokVideo[] | undefined;
+            if (Array.isArray(items) && items.length > 0) {
+              capturedVideos.push(...items);
+            }
+          } catch { /* ignore */ }
+        }
+      });
+
       await page.goto(`https://www.tiktok.com/@${username}`, {
         waitUntil: 'networkidle2',
         timeout: 30000,
       });
 
-      // Scroll to trigger lazy-loaded video grid, then wait for XHR to settle
+      // Scroll to trigger video list API call if not yet fired
       await page.evaluate(() => window.scrollBy(0, 600));
-      await new Promise(r => setTimeout(r, 4000));
+      await new Promise(r => setTimeout(r, 3000));
 
-      // Wait explicitly for video items if not yet visible
+      // If API interception captured videos, use them directly
+      if (capturedVideos.length > 0) {
+        console.log(`tiktok browser @${username}: intercepted ${capturedVideos.length} videos from API`);
+        return this.convertVideos(capturedVideos, username, sinceCursor);
+      }
+
+      console.log(`tiktok browser @${username}: API interception got 0 videos, falling back to DOM/SSR`);
+
+      // Wait for video items if not yet visible
       await page.waitForSelector(
         'a[href*="/video/"], [data-e2e="user-post-item"]',
         { timeout: 8000 }
