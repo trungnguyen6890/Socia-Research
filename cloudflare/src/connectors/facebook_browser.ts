@@ -247,23 +247,30 @@ export class FacebookBrowserConnector extends BaseConnector {
     await page.evaluate(() => window.scrollBy(0, 600));
     await new Promise(r => setTimeout(r, 2000));
 
-    const pageState = await page.evaluate(() => ({
-      isLoginPage:
-        !!document.querySelector('[data-testid="royal_login_form"]') ||
-        document.title.toLowerCase().includes('log in') ||
-        document.title.toLowerCase().includes('đăng nhập') ||
-        !!document.querySelector('form[action*="login"]'),
-      articleCount: document.querySelectorAll('[role="article"]').length,
-      feedUnitCount: document.querySelectorAll('[data-pagelet*="FeedUnit"]').length,
-      title: document.title,
-    }));
+    const pageState = await page.evaluate(() => {
+      // Only treat as login page if the VISIBLE login form is present.
+      // Facebook always has hidden form[action*="login"] elements — do NOT use that selector.
+      const hasLoginForm = !!document.querySelector('[data-testid="royal_login_form"]');
+      const titleLower = document.title.toLowerCase();
+      const titleIsLogin = titleLower === 'log in to facebook' ||
+        titleLower === 'đăng nhập facebook' ||
+        titleLower === 'facebook – log in or sign up' ||
+        titleLower.startsWith('log in') && titleLower.includes('facebook');
+      return {
+        isLoginPage: hasLoginForm || titleIsLogin,
+        articleCount: document.querySelectorAll('[role="article"]').length,
+        feedUnitCount: document.querySelectorAll('[data-pagelet*="FeedUnit"]').length,
+        title: document.title,
+        url: window.location.href,
+      };
+    });
 
-    console.log(`full site "${handle}": login=${pageState.isLoginPage}, articles=${pageState.articleCount}, feedUnits=${pageState.feedUnitCount}, title="${pageState.title}"`);
+    console.log(`full site "${handle}": login=${pageState.isLoginPage}, articles=${pageState.articleCount}, feedUnits=${pageState.feedUnitCount}, title="${pageState.title}", url=${pageState.url}`);
 
     if (pageState.isLoginPage) {
       throw new Error(
-        `Cookies rejected on www.facebook.com for "${handle}". ` +
-        'Re-extract cookies from your browser and run: wrangler secret put FB_COOKIES'
+        `Cookies rejected — Facebook shows login page for "${handle}" (title="${pageState.title}"). ` +
+        'Re-extract cookies and run: wrangler secret put FB_COOKIES'
       );
     }
 
