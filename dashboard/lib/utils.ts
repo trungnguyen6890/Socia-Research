@@ -46,6 +46,7 @@ export const CONNECTOR_COLORS: Record<string, string> = {
   facebook_page: 'bg-indigo-50 text-indigo-700',
   facebook_browser: 'bg-indigo-50 text-indigo-700',
   instagram_pro: 'bg-pink-50 text-pink-700',
+  tiktok: 'bg-neutral-900 text-white',
   tiktok_watch: 'bg-neutral-100 text-neutral-700',
   threads_watch: 'bg-neutral-100 text-neutral-700',
 };

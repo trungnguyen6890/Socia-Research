@@ -13,6 +13,7 @@ const CONNECTOR_MODE: Record<string, string> = {
   facebook_page: 'official_api',
   facebook_browser: 'manual_watch',
   instagram_pro: 'provider_api',
+  tiktok: 'website_parse',
   tiktok_watch: 'manual_watch',
   telegram: 'manual_watch',
   threads_watch: 'manual_watch',
@@ -120,8 +121,8 @@ export function parseSourceInput(raw: string): ParsedSource | null {
       if (!handle) return null;
       return {
         name: toName(handle),
-        connector_type: 'tiktok_watch',
-        source_mode: CONNECTOR_MODE.tiktok_watch,
+        connector_type: 'tiktok',
+        source_mode: CONNECTOR_MODE.tiktok,
         url_or_handle: `@${handle}`,
         raw_input: line,
         confidence: 'high',
@@ -242,7 +243,8 @@ export const CONNECTOR_LABEL: Record<string, string> = {
   facebook_page: 'Facebook (API)',
   facebook_browser: 'Facebook (Browser)',
   instagram_pro: 'Instagram',
-  tiktok_watch: 'TikTok',
+  tiktok: 'TikTok',
+  tiktok_watch: 'TikTok (watch)',
   telegram: 'Telegram',
   threads_watch: 'Threads',
   rss: 'RSS',

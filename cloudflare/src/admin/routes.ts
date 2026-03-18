@@ -12,7 +12,8 @@ import { detectSource } from '../detect';
 
 const CONNECTOR_TYPES = [
   'rss', 'website', 'youtube', 'x_browser', 'telegram',
-  'facebook_page', 'instagram_pro', 'facebook_profile_watch', 'tiktok_watch', 'threads_watch',
+  'facebook_page', 'facebook_browser', 'instagram_pro', 'tiktok',
+  'facebook_profile_watch', 'tiktok_watch', 'threads_watch',
 ];
 const SOURCE_MODES = ['official_api', 'rss', 'website_parse', 'manual_watch', 'provider_api'];
 const MATCH_MODES = ['exact', 'contains', 'regex'];
