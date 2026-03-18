@@ -128,11 +128,14 @@ export class TikTokConnector extends BaseConnector {
         timeout: 30000,
       });
 
-      // Wait for video grid or JSON data to be available
+      // Wait for video grid or JSON script to appear
       await page.waitForSelector(
         '[data-e2e="user-post-item"], [data-e2e="user-post-item-list"], #__UNIVERSAL_DATA_FOR_REHYDRATION__',
         { timeout: 15000 }
       ).catch(() => {});
+
+      // Scroll to trigger lazy-loaded video grid
+      await page.evaluate(() => window.scrollBy(0, 800));
       await new Promise(r => setTimeout(r, 3000));
 
       const result = await page.evaluate(() => {
@@ -223,7 +226,11 @@ export class TikTokConnector extends BaseConnector {
         return info;
       });
 
-      console.log(`tiktok browser @${username}: title="${result.title}", captcha=${result.hasCaptcha}, scopeKeys=${JSON.stringify(result.scopeKeys)}, videos=${(result.videos as unknown[] | null)?.length ?? 0}`);
+      // Log page state for debugging
+      const bodySnippet = await page.evaluate(() => document.body.innerHTML.slice(0, 1000));
+      const videoLinkCount = await page.evaluate(() => document.querySelectorAll('a[href*="/video/"]').length);
+      console.log(`tiktok browser @${username}: title="${result.title}", captcha=${result.hasCaptcha}, scopeKeys=${JSON.stringify(result.scopeKeys)}, videos=${(result.videos as unknown[] | null)?.length ?? 0}, domVideoLinks=${videoLinkCount}`);
+      console.log(`tiktok body snippet: ${bodySnippet.slice(0, 500)}`);
 
       if (result.hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
 
