@@ -8,6 +8,7 @@ import {
 } from '../db';
 import { runSourcePipeline } from '../pipeline/runner';
 import { jsonParse } from '../db';
+import { detectSource } from '../detect';
 
 const CONNECTOR_TYPES = [
   'rss', 'website', 'youtube', 'x_browser', 'telegram',
@@ -173,7 +174,7 @@ function showToast(type, msg) {
 }
 </script>`;
 
-    const body = `<div class="toolbar"><h2>Sources</h2><a href="/admin/sources/new" class="btn btn-primary">+ Add Source</a></div>
+    const body = `<div class="toolbar"><h2>Sources</h2><div style="display:flex;gap:.5rem"><a href="/admin/sources/bulk" class="btn btn-outline">Bulk Add</a><a href="/admin/sources/new" class="btn btn-primary">+ Add Source</a></div></div>
 <table><thead><tr><th>Name / URL</th><th>Type</th><th>Mode</th><th>Priority</th><th>Status</th><th>Last Fetch</th><th>Actions</th></tr></thead>
 <tbody>${rows || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No sources yet</td></tr>'}</tbody></table>
 ${script}`;
@@ -182,6 +183,40 @@ ${script}`;
 
   app.get('/admin/sources/new', (c) => {
     return c.html(layout('New Source', '/admin/sources', sourceForm(null)));
+  });
+
+  app.get('/admin/sources/bulk', (c) => {
+    return c.html(layout('Bulk Add Sources', '/admin/sources', bulkAddForm()));
+  });
+
+  app.post('/admin/sources/bulk-save', async (c) => {
+    const body = await c.req.json<Array<{
+      name: string; connector_type: string; source_mode: string;
+      url_or_handle: string; config: string; tags: string; priority: number;
+    }>>();
+    if (!Array.isArray(body) || body.length === 0) return c.json({ error: 'empty list' }, 400);
+    const ids: string[] = [];
+    for (const item of body) {
+      const id = crypto.randomUUID();
+      let config = '{}';
+      try { JSON.parse(item.config); config = item.config; } catch {}
+      await upsertSource(c.env, {
+        id, name: item.name, connector_type: item.connector_type,
+        source_mode: item.source_mode, url_or_handle: item.url_or_handle,
+        config, tags: item.tags ?? '[]',
+        priority: item.priority ?? 5, is_active: 1,
+      });
+      ids.push(id);
+    }
+    return c.json({ ok: true, created: ids.length });
+  });
+
+  app.post('/admin/detect-source', async (c) => {
+    const f = await c.req.formData();
+    const url = (f.get('url') as string ?? '').trim();
+    if (!url) return c.json({ error: 'url required' }, 400);
+    const result = await detectSource(url);
+    return c.json(result);
   });
 
   app.get('/admin/sources/:id/edit', async (c) => {
@@ -576,7 +611,73 @@ function sourceForm(s: Record<string,unknown> | null): string {
   const tags = s ? jsonParse<string[]>(s.tags as string, []).join(', ') : '';
   const config = s ? (() => { try { return JSON.stringify(JSON.parse(s.config as string), null, 2); } catch { return '{}'; } })() : '{}';
 
+  const detectSection = s ? '' : `
+<div class="detail-card" style="margin-bottom:1.5rem;border:1px dashed var(--border)">
+  <h3 style="margin-bottom:.75rem">Auto-detect connector</h3>
+  <p style="color:var(--muted);font-size:.82rem;margin-bottom:.75rem">
+    Paste any URL — YouTube, X, Telegram, Facebook, RSS feed, or website. The system will detect the right connector and fill the form automatically.
+  </p>
+  <div style="display:flex;gap:.5rem;align-items:center">
+    <input type="text" id="detect-url" placeholder="https://vietnamnet.vn/ or @username or youtube.com/@channel" style="flex:1;margin-bottom:0">
+    <button type="button" class="btn btn-primary" onclick="runDetect()" id="detect-btn">Detect</button>
+  </div>
+  <div id="detect-result" style="margin-top:.75rem;display:none"></div>
+</div>
+<script>
+async function runDetect() {
+  const url = document.getElementById('detect-url').value.trim();
+  if (!url) return;
+  const btn = document.getElementById('detect-btn');
+  const res = document.getElementById('detect-result');
+  btn.disabled = true;
+  btn.textContent = 'Detecting…';
+  res.style.display = 'none';
+
+  try {
+    const r = await fetch('/admin/detect-source', {
+      method: 'POST',
+      body: new URLSearchParams({ url }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+
+    // Fill form fields
+    document.querySelector('select[name="connector_type"]').value = d.connector_type;
+    document.querySelector('select[name="source_mode"]').value = d.source_mode;
+    document.querySelector('input[name="url_or_handle"]').value = d.url_or_handle;
+    if (Object.keys(d.config).length > 0) {
+      document.querySelector('textarea[name="config_json"]').value = JSON.stringify(d.config, null, 2);
+    }
+    // Auto-fill name from URL if empty
+    const nameField = document.querySelector('input[name="name"]');
+    if (!nameField.value) {
+      try {
+        const u = new URL(url.startsWith('http') ? url : 'https://' + url);
+        nameField.value = u.hostname.replace(/^www\\./, '');
+      } catch {}
+    }
+
+    const colors = { high: '#22c55e', medium: '#f59e0b', low: '#ef4444' };
+    const color = colors[d.confidence] || '#888';
+    res.innerHTML = '<div style="padding:.6rem .9rem;border-radius:6px;background:var(--bg-secondary);font-size:.82rem">'
+      + '<span style="font-weight:600;color:' + color + '">' + d.confidence.toUpperCase() + '</span> '
+      + '→ <span class="badge b-blue">' + d.connector_type + '</span> '
+      + '<span style="color:var(--muted);margin-left:.4rem">' + d.note + '</span>'
+      + '</div>';
+    res.style.display = 'block';
+  } catch(e) {
+    res.innerHTML = '<div style="color:#ef4444;font-size:.82rem">Detection failed: ' + e.message + '</div>';
+    res.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Detect';
+  }
+}
+document.getElementById('detect-url').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runDetect(); } });
+</script>`;
+
   return `<h2>${title}</h2>
+${detectSection}
 <form method="post" action="${action}" style="max-width:600px">
 <div class="form-group"><label>Name</label>
 <input type="text" name="name" value="${s?.name ?? ''}" required></div>
@@ -668,4 +769,165 @@ ${s ? `<div class="form-group"><div class="cb-group">
 <button type="submit" class="btn btn-primary">${s ? 'Update' : 'Create'}</button>
 <a href="/admin/schedules" class="btn btn-outline">Cancel</a>
 </div></form>`;
+}
+
+function bulkAddForm(): string {
+  return `<div style="margin-bottom:1rem"><a href="/admin/sources" class="btn btn-sm btn-outline">← Back to Sources</a></div>
+<h2>Bulk Add Sources</h2>
+<p style="color:var(--muted);font-size:.85rem;margin-bottom:1.5rem">
+  Paste one URL per line — YouTube, X/Twitter, Telegram, Facebook, RSS feeds, or websites. Click <strong>Parse &amp; Detect</strong> to auto-detect the right connector for each.
+</p>
+
+<div class="detail-card" style="margin-bottom:1.5rem">
+  <h3 style="margin-bottom:.75rem">Step 1 — Paste URLs</h3>
+  <textarea id="bulk-urls" rows="8" placeholder="https://vietnamnet.vn/&#10;https://x.com/elonmusk&#10;https://t.me/durov&#10;https://www.youtube.com/@mkbhd&#10;https://www.facebook.com/bbcnews" style="font-family:monospace;font-size:.85rem;width:100%;box-sizing:border-box"></textarea>
+  <div style="margin-top:.75rem;display:flex;align-items:center;gap:.75rem">
+    <button class="btn btn-primary" onclick="parseUrls()" id="parse-btn">Parse &amp; Detect</button>
+    <span id="parse-status" style="font-size:.82rem;color:var(--muted)"></span>
+  </div>
+</div>
+
+<div id="results-section" style="display:none">
+  <div class="detail-card" style="margin-bottom:1.5rem">
+    <h3 style="margin-bottom:.75rem">Step 2 — Review &amp; Confirm</h3>
+    <p style="color:var(--muted);font-size:.82rem;margin-bottom:1rem">Edit names as needed. Uncheck rows you don't want to add.</p>
+    <div style="overflow-x:auto">
+      <table id="results-table">
+        <thead><tr>
+          <th style="width:2rem"></th>
+          <th>Original URL</th>
+          <th>Connector</th>
+          <th>URL / Handle</th>
+          <th>Name</th>
+          <th>Confidence</th>
+          <th>Note</th>
+        </tr></thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:.75rem;margin-top:1rem">
+    <button class="btn btn-primary" onclick="saveAll()" id="save-btn">Add Selected Sources</button>
+    <span id="save-status" style="font-size:.82rem;color:var(--muted)"></span>
+  </div>
+</div>
+
+<script>
+let detectedRows = [];
+
+async function parseUrls() {
+  const raw = document.getElementById('bulk-urls').value;
+  const urls = raw.split('\\n').map(s => s.trim()).filter(Boolean);
+  if (!urls.length) return;
+
+  const btn = document.getElementById('parse-btn');
+  const status = document.getElementById('parse-status');
+  btn.disabled = true;
+  btn.textContent = 'Detecting…';
+  detectedRows = [];
+
+  const tbody = document.getElementById('results-body');
+  tbody.innerHTML = '';
+  document.getElementById('results-section').style.display = 'none';
+
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    status.textContent = 'Detecting ' + (i + 1) + ' / ' + urls.length + ': ' + url.slice(0, 50) + '…';
+
+    let d;
+    try {
+      const r = await fetch('/admin/detect-source', {
+        method: 'POST',
+        body: new URLSearchParams({ url }),
+      });
+      d = await r.json();
+      if (d.error) throw new Error(d.error);
+    } catch(e) {
+      d = { connector_type: 'website', url_or_handle: url, source_mode: 'website_parse', config: {}, confidence: 'low', note: 'Detection failed: ' + e.message };
+    }
+
+    // Auto-generate name from original URL
+    let name = '';
+    try {
+      const u = new URL(url.startsWith('http') ? url : 'https://' + url);
+      name = u.hostname.replace(/^www\\./, '');
+      const path = u.pathname.replace(/\\/$/, '').split('/').pop() || '';
+      if (path && path.length < 30 && !path.match(/^\\d+$/)) name += ' / ' + path;
+    } catch { name = url.slice(0, 40); }
+
+    const row = { url, name, ...d, include: true };
+    detectedRows.push(row);
+
+    const confColors = { high: '#22c55e', medium: '#f59e0b', low: '#ef4444' };
+    const confColor = confColors[d.confidence] || '#888';
+    const idx = detectedRows.length - 1;
+
+    tbody.insertAdjacentHTML('beforeend',
+      '<tr id="row-' + idx + '">' +
+      '<td><input type="checkbox" checked onchange="detectedRows[' + idx + '].include = this.checked; updateRowStyle(' + idx + ')"></td>' +
+      '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.78rem;color:var(--muted)" title="' + url + '">' + url + '</td>' +
+      '<td><span class="badge b-blue">' + d.connector_type + '</span></td>' +
+      '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem">' + d.url_or_handle + '</td>' +
+      '<td><input type="text" value="' + name.replace(/"/g, '&quot;') + '" style="width:160px;margin-bottom:0" oninput="detectedRows[' + idx + '].name = this.value"></td>' +
+      '<td><span style="font-weight:600;font-size:.78rem;color:' + confColor + '">' + d.confidence.toUpperCase() + '</span></td>' +
+      '<td style="max-width:220px;font-size:.78rem;color:var(--muted)">' + d.note + '</td>' +
+      '</tr>'
+    );
+  }
+
+  document.getElementById('results-section').style.display = 'block';
+  status.textContent = 'Done — ' + urls.length + ' URLs processed.';
+  btn.disabled = false;
+  btn.textContent = 'Parse & Detect';
+  updateSaveBtn();
+}
+
+function updateRowStyle(idx) {
+  const row = document.getElementById('row-' + idx);
+  if (row) row.style.opacity = detectedRows[idx].include ? '1' : '0.4';
+  updateSaveBtn();
+}
+
+function updateSaveBtn() {
+  const n = detectedRows.filter(r => r.include).length;
+  document.getElementById('save-btn').textContent = 'Add ' + n + ' Selected Source' + (n !== 1 ? 's' : '');
+}
+
+async function saveAll() {
+  const toSave = detectedRows.filter(r => r.include && r.name.trim());
+  if (!toSave.length) return;
+
+  const btn = document.getElementById('save-btn');
+  const status = document.getElementById('save-status');
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+
+  const payload = toSave.map(r => ({
+    name: r.name.trim(),
+    connector_type: r.connector_type,
+    source_mode: r.source_mode,
+    url_or_handle: r.url_or_handle,
+    config: Object.keys(r.config).length > 0 ? JSON.stringify(r.config) : '{}',
+    tags: '[]',
+    priority: 5,
+  }));
+
+  try {
+    const res = await fetch('/admin/sources/bulk-save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    status.textContent = '✓ ' + d.created + ' sources added!';
+    setTimeout(() => { window.location.href = '/admin/sources'; }, 1200);
+  } catch(e) {
+    status.textContent = '⚠ Save failed: ' + e.message;
+    btn.disabled = false;
+    btn.textContent = 'Retry';
+  }
+}
+</script>`;
 }

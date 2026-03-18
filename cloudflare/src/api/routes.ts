@@ -7,6 +7,7 @@ import {
   dbFirst, dbRun, jsonParse,
 } from '../db';
 import { runSourcePipeline } from '../pipeline/runner';
+import { detectSource } from '../detect';
 
 // ─── Content item schema helpers ─────────────────────────────────────────────
 
@@ -156,6 +157,14 @@ export function createApiRouter() {
     await dbRun(c.env, 'DELETE FROM schedules WHERE source_id=?', id);
     await dbRun(c.env, 'DELETE FROM sources WHERE id=?', id);
     return c.json({ ok: true });
+  });
+
+  // ─── Source detection ─────────────────────────────────────────────────────
+  api.post('/api/detect-source', async (c) => {
+    const body = await c.req.json<{ url: string }>();
+    if (!body.url) return c.json({ error: 'url required' }, 400);
+    const result = await detectSource(body.url);
+    return c.json(result);
   });
 
   api.post('/api/sources/:id/run', async (c) => {
