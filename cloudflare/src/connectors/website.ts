@@ -87,7 +87,6 @@ export class WebsiteConnector extends BaseConnector {
           title: item.title.trim() || null,
           textContent: item.text.trim() || null,
           publishTime: null,
-          rawData: { title: item.title.trim(), link, text: item.text.trim() },
         };
       });
 

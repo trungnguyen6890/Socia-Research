@@ -5,6 +5,18 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
+/** Strip HTML tags and decode common entities — used to clean RSS content */
+function stripHtml(html: string | null): string | null {
+  if (!html) return null;
+  const text = html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text || null;
+}
+
 function canonicalizeUrl(url: string): string {
   try {
     const u = new URL(url);
@@ -58,7 +70,7 @@ function checkTruncated(text: string | null): boolean {
 
 export async function normalizeItem(raw: RawItem, source: SourceRow): Promise<NormalizedItem> {
   const url = raw.url ?? '';
-  const text = raw.textContent ?? '';
+  const text = stripHtml(raw.textContent ?? '') ?? '';
   const hashInput = `${raw.title ?? ''} ${text}`.trim();
 
   return {

@@ -43,7 +43,6 @@ export class RSSConnector extends BaseConnector {
         contentType: 'article',
         authorName: author ? this.stripCdata(author) : null,
         hasMedia: false,
-        rawData: { id, title, link, summary, published },
       });
     }
 

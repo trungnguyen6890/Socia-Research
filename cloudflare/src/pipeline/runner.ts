@@ -1,4 +1,4 @@
-import { Env, SourceRow, WATCH_ONLY } from '../types';
+import { Env, SourceRow, NormalizedItem, WATCH_ONLY } from '../types';
 import { getConnector } from '../connectors/index';
 import { normalizeItem } from './normalize';
 import { dedupeItems } from './dedupe';
@@ -18,8 +18,16 @@ export interface PipelineResult {
   totalFetched?: number;
   duplicates?: number;
   filtered?: number;
+  gated?: number;    // items dropped by quality gate (no URL or no content)
   reason?: string;
   error?: string;
+}
+
+/** Minimum bar: item must have a URL and at least a title or text body */
+function passesQualityGate(item: NormalizedItem): boolean {
+  if (!item.url) return false;
+  if (!item.text_content && !item.title) return false;
+  return true;
 }
 
 export async function runSourcePipeline(
@@ -88,8 +96,11 @@ export async function runSourcePipeline(
     const goals = await getGoals(env, true);
     const scored = scoreItems(tagged, goals as never);
 
-    // 7. Store — only insert new (non-duplicate) items
-    const newItems = scored.filter((i) => !i.is_duplicate);
+    // 7. Store — only insert new (non-duplicate) items that pass quality gate
+    const nonDupes = scored.filter((i) => !i.is_duplicate);
+    const newItems = nonDupes.filter(passesQualityGate);
+    const gated = nonDupes.length - newItems.length;
+
     for (const item of newItems) {
       await insertContentItem(env, {
         ...item,
@@ -100,10 +111,10 @@ export async function runSourcePipeline(
     // 8. Update cursor
     if (newCursor) await updateSourceCursor(env, source.id, newCursor);
 
-    const duplicates = scored.length - newItems.length;
+    const duplicates = scored.length - nonDupes.length;
     await finishRunLog(env, runId, 'success', newItems.length);
 
-    return { status: 'success', itemsFetched: newItems.length, totalFetched: rawItems.length, duplicates, filtered };
+    return { status: 'success', itemsFetched: newItems.length, totalFetched: rawItems.length, duplicates, filtered, gated };
 
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

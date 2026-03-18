@@ -98,6 +98,7 @@ export interface RunResult {
   totalFetched?: number;
   duplicates?: number;
   filtered?: number;
+  gated?: number;
   reason?: string;
   error?: string;
 }
