@@ -123,19 +123,20 @@ export class TikTokConnector extends BaseConnector {
       );
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
 
-      // Intercept TikTok video list API responses BEFORE navigation
-      const capturedVideos: TikTokVideo[] = [];
-      page.on('response', async (response) => {
-        const url = response.url();
-        if (url.includes('/api/post/item_list/') || url.includes('/aweme/v1/aweme/post/')) {
-          try {
-            const json = await response.json() as Record<string, unknown>;
-            const items = (json['itemList'] ?? json['aweme_list']) as TikTokVideo[] | undefined;
-            if (Array.isArray(items) && items.length > 0) {
-              capturedVideos.push(...items);
-            }
-          } catch { /* ignore */ }
-        }
+      // Hook Response.prototype.json BEFORE navigation to capture video list API responses.
+      // TikTok streams XHR body (CDP/page.on('response') returns empty), but this hook
+      // intercepts the data when TikTok's own JS calls response.json().
+      await page.evaluateOnNewDocument(() => {
+        const origJson = Response.prototype.json;
+        (window as Record<string, unknown>)['__ttVideos'] = [];
+        Response.prototype.json = async function () {
+          const result = await origJson.call(this) as Record<string, unknown>;
+          if (Array.isArray(result?.['itemList']) && (result['itemList'] as unknown[]).length > 0)
+            ((window as Record<string, unknown>)['__ttVideos'] as unknown[]).push(...result['itemList'] as unknown[]);
+          if (Array.isArray(result?.['aweme_list']) && (result['aweme_list'] as unknown[]).length > 0)
+            ((window as Record<string, unknown>)['__ttVideos'] as unknown[]).push(...result['aweme_list'] as unknown[]);
+          return result;
+        };
       });
 
       await page.goto(`https://www.tiktok.com/@${username}`, {
@@ -143,126 +144,26 @@ export class TikTokConnector extends BaseConnector {
         timeout: 30000,
       });
 
-      // Scroll to trigger video list API call if not yet fired
-      await page.evaluate(() => window.scrollBy(0, 600));
-      await new Promise(r => setTimeout(r, 3000));
+      const title = await page.title();
+      const hasCaptcha = await page.evaluate(() =>
+        !!document.querySelector('[class*="captcha"], [id*="captcha"]')
+      );
+      if (hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
 
-      // If API interception captured videos, use them directly
-      if (capturedVideos.length > 0) {
-        console.log(`tiktok browser @${username}: intercepted ${capturedVideos.length} videos from API`);
-        return this.convertVideos(capturedVideos, username, sinceCursor);
+      // Scroll 3× to trigger progressive video list API calls (returns ~35 videos each)
+      for (let i = 0; i < 3; i++) {
+        await page.evaluate(() => window.scrollBy(0, 1200));
+        await new Promise(r => setTimeout(r, 2500));
       }
 
-      console.log(`tiktok browser @${username}: API interception got 0 videos, falling back to DOM/SSR`);
+      const videos = await page.evaluate(
+        () => (window as Record<string, unknown>)['__ttVideos'] as TikTokVideo[]
+      );
 
-      // Wait for video items if not yet visible
-      await page.waitForSelector(
-        'a[href*="/video/"], [data-e2e="user-post-item"]',
-        { timeout: 8000 }
-      ).catch(() => {});
+      console.log(`tiktok browser @${username}: title="${title}", captured=${videos?.length ?? 0} videos via Response.json hook`);
 
-      const result = await page.evaluate(() => {
-        const info: Record<string, unknown> = {
-          title: document.title,
-          url: window.location.href,
-          hasCaptcha: !!document.querySelector('[class*="captcha"], [id*="captcha"]'),
-          scopeKeys: [] as string[],
-          videos: null as unknown[] | null,
-        };
-
-        // ── Method 1: __UNIVERSAL_DATA_FOR_REHYDRATION__ ──
-        const scriptEl = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
-        if (scriptEl?.textContent) {
-          try {
-            const data = JSON.parse(scriptEl.textContent);
-            const scope = data['__DEFAULT_SCOPE__'] as Record<string, unknown> | undefined;
-            if (scope) {
-              info.scopeKeys = Object.keys(scope);
-              // Try every known path
-              const candidates = [
-                scope['webapp.video-list'],
-                scope['webapp.user-page'],
-                scope['webapp.user-detail'],
-                ...Object.values(scope),
-              ];
-              for (const candidate of candidates) {
-                const c = candidate as Record<string, unknown> | null | undefined;
-                const items =
-                  (c?.['videoList'] as Record<string, unknown> | undefined)?.['items'] ??
-                  (c?.['itemList'] as unknown[]) ??
-                  (c?.['videos'] as unknown[]) ??
-                  null;
-                if (Array.isArray(items) && items.length > 0) {
-                  info.videos = items;
-                  break;
-                }
-              }
-            }
-          } catch { /* fall through */ }
-        }
-
-        // ── Method 2: scan all scripts for video arrays ──
-        if (!info.videos) {
-          for (const script of Array.from(document.querySelectorAll('script'))) {
-            const text = script.textContent ?? '';
-            if (text.length < 100 || text.length > 5_000_000) continue;
-            // Look for arrays with TikTok video shape: id + stats + createTime
-            const m = text.match(/"id"\s*:\s*"\d{15,}".{0,200}"createTime"\s*:\s*\d+/);
-            if (!m) continue;
-            // Try to extract the surrounding array
-            const arrMatch = text.match(/\[\s*\{[^[]*?"id"\s*:\s*"\d{15,}"[\s\S]{0,50000}?\]\s*[,}]/);
-            if (arrMatch) {
-              try {
-                const arr = JSON.parse(arrMatch[0].replace(/[,}]$/, ']').replace(/^([^[]+)/, '['));
-                if (Array.isArray(arr) && arr.length > 0 && arr[0].id) {
-                  info.videos = arr;
-                  break;
-                }
-              } catch { /* continue */ }
-            }
-          }
-        }
-
-        // ── Method 3: DOM — extract all /video/ links on the page ──
-        if (!info.videos) {
-          const seen = new Set<string>();
-          const domVideos: Array<Record<string, unknown>> = [];
-          document.querySelectorAll<HTMLAnchorElement>('a[href*="/video/"]').forEach(a => {
-            const href = a.href;
-            const idMatch = href.match(/\/video\/(\d+)/);
-            if (!idMatch || seen.has(idMatch[1])) return;
-            seen.add(idMatch[1]);
-            // Try to get alt text from nearby img (caption)
-            const img = a.querySelector('img') ?? a.closest('[data-e2e]')?.querySelector('img');
-            domVideos.push({
-              id: idMatch[1],
-              _url: href.split('?')[0],
-              desc: img?.getAttribute('alt') ?? '',
-            });
-          });
-          if (domVideos.length > 0) {
-            info.videos = domVideos;
-            info.method = 'dom';
-          }
-        }
-
-        return info;
-      });
-
-      // Log page state for debugging
-      const bodySnippet = await page.evaluate(() => document.body.innerHTML.slice(0, 1000));
-      const videoLinkCount = await page.evaluate(() => document.querySelectorAll('a[href*="/video/"]').length);
-      console.log(`tiktok browser @${username}: title="${result.title}", captcha=${result.hasCaptcha}, scopeKeys=${JSON.stringify(result.scopeKeys)}, videos=${(result.videos as unknown[] | null)?.length ?? 0}, domVideoLinks=${videoLinkCount}`);
-      console.log(`tiktok body snippet: ${bodySnippet.slice(0, 500)}`);
-
-      if (result.hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
-
-      const videos = result.videos as TikTokVideo[] | null;
       if (!videos?.length) {
-        throw new Error(
-          `TikTok: 0 videos for @${username} ` +
-          `(title="${result.title}", scopeKeys=${JSON.stringify(result.scopeKeys)})`
-        );
+        throw new Error(`TikTok: 0 videos for @${username} (title="${title}")`);
       }
 
       return this.convertVideos(videos, username, sinceCursor);
