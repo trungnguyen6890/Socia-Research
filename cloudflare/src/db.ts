@@ -143,20 +143,34 @@ export async function insertContentItem(env: Env, item: Record<string, unknown>)
   );
 }
 
-export async function findDuplicates(env: Env, urls: string[], hashes: string[]) {
-  const urlPlaceholders = urls.map(() => '?').join(',');
-  const hashPlaceholders = hashes.map(() => '?').join(',');
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
 
-  const byUrl = urls.length
-    ? await dbAll<{ id: string; url: string; canonical_url: string | null }>(env,
-        `SELECT id, url, canonical_url FROM content_items WHERE url IN (${urlPlaceholders}) OR canonical_url IN (${urlPlaceholders})`,
-        ...urls, ...urls)
-    : [];
-  const byHash = hashes.length
-    ? await dbAll<{ id: string; content_hash: string }>(env,
-        `SELECT id, content_hash FROM content_items WHERE content_hash IN (${hashPlaceholders})`,
-        ...hashes)
-    : [];
+export async function findDuplicates(env: Env, urls: string[], hashes: string[]) {
+  const byUrl: { id: string; url: string; canonical_url: string | null }[] = [];
+  const byHash: { id: string; content_hash: string }[] = [];
+
+  // Each URL appears twice in the query (url IN + canonical_url IN) → batch by 100 → 200 params/query
+  for (const chunk of chunkArray(urls, 100)) {
+    const ph = chunk.map(() => '?').join(',');
+    const rows = await dbAll<{ id: string; url: string; canonical_url: string | null }>(env,
+      `SELECT id, url, canonical_url FROM content_items WHERE url IN (${ph}) OR canonical_url IN (${ph})`,
+      ...chunk, ...chunk);
+    byUrl.push(...rows);
+  }
+
+  // Hashes: 1 param each → batch by 200
+  for (const chunk of chunkArray(hashes, 200)) {
+    const ph = chunk.map(() => '?').join(',');
+    const rows = await dbAll<{ id: string; content_hash: string }>(env,
+      `SELECT id, content_hash FROM content_items WHERE content_hash IN (${ph})`,
+      ...chunk);
+    byHash.push(...rows);
+  }
+
   return { byUrl, byHash };
 }
 
