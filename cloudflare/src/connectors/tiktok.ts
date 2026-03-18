@@ -89,26 +89,27 @@ export class TikTokConnector extends BaseConnector {
       return [];
     }
 
-    // Navigate: data.__DEFAULT_SCOPE__['webapp.video-list'].videoList.items
-    try {
-      const scope = data['__DEFAULT_SCOPE__'] as Record<string, unknown>;
-      const videoListScope = scope['webapp.video-list'] as Record<string, unknown>;
-      const videoList = videoListScope['videoList'] as Record<string, unknown>;
-      const items = videoList['items'] as TikTokVideo[];
-      return Array.isArray(items) ? items : [];
-    } catch {
-      // Try alternate path: data.__DEFAULT_SCOPE__['webapp.user-page']
-      try {
-        const scope = data['__DEFAULT_SCOPE__'] as Record<string, unknown>;
-        const userPage = scope['webapp.user-page'] as Record<string, unknown>;
-        const videoList = userPage['videoList'] as Record<string, unknown>;
-        const items = videoList['items'] as TikTokVideo[];
-        return Array.isArray(items) ? items : [];
-      } catch {
-        console.log('tiktok: could not find video items in SSR data');
-        return [];
-      }
+    // Try every known scope path
+    const scope = data['__DEFAULT_SCOPE__'] as Record<string, unknown> | undefined;
+    if (!scope) {
+      console.log('tiktok: no __DEFAULT_SCOPE__ in SSR data');
+      return [];
     }
+
+    console.log(`tiktok SSR scopeKeys: ${Object.keys(scope).join(', ')}`);
+
+    for (const value of Object.values(scope)) {
+      const v = value as Record<string, unknown> | null | undefined;
+      const items =
+        (v?.['videoList'] as Record<string, unknown> | undefined)?.['items'] ??
+        (v?.['itemList'] as unknown[]) ??
+        (v?.['items'] as unknown[]) ??
+        null;
+      if (Array.isArray(items) && items.length > 0) return items as TikTokVideo[];
+    }
+
+    console.log('tiktok: no video items found in any scope key');
+    return [];
   }
 
   // ─── Strategy 2: CF Browser ───────────────────────────────────────────────
@@ -126,47 +127,99 @@ export class TikTokConnector extends BaseConnector {
         waitUntil: 'networkidle2',
         timeout: 30000,
       });
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 4000));
 
-      const videos = await page.evaluate(() => {
-        // Primary: __UNIVERSAL_DATA_FOR_REHYDRATION__ script tag
+      const result = await page.evaluate(() => {
+        const info: Record<string, unknown> = {
+          title: document.title,
+          url: window.location.href,
+          hasCaptcha: !!document.querySelector('[class*="captcha"], [id*="captcha"]'),
+          scopeKeys: [] as string[],
+          videos: null as unknown[] | null,
+        };
+
+        // ── Method 1: __UNIVERSAL_DATA_FOR_REHYDRATION__ ──
         const scriptEl = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__');
         if (scriptEl?.textContent) {
           try {
             const data = JSON.parse(scriptEl.textContent);
-            const scope = data['__DEFAULT_SCOPE__'];
-            const items =
-              scope?.['webapp.video-list']?.videoList?.items ??
-              scope?.['webapp.user-page']?.videoList?.items ??
-              null;
-            if (Array.isArray(items) && items.length > 0) return items;
+            const scope = data['__DEFAULT_SCOPE__'] as Record<string, unknown> | undefined;
+            if (scope) {
+              info.scopeKeys = Object.keys(scope);
+              // Try every known path
+              const candidates = [
+                scope['webapp.video-list'],
+                scope['webapp.user-page'],
+                scope['webapp.user-detail'],
+                ...Object.values(scope),
+              ];
+              for (const candidate of candidates) {
+                const c = candidate as Record<string, unknown> | null | undefined;
+                const items =
+                  (c?.['videoList'] as Record<string, unknown> | undefined)?.['items'] ??
+                  (c?.['itemList'] as unknown[]) ??
+                  (c?.['videos'] as unknown[]) ??
+                  null;
+                if (Array.isArray(items) && items.length > 0) {
+                  info.videos = items;
+                  break;
+                }
+              }
+            }
           } catch { /* fall through */ }
         }
 
-        // Fallback: scan all script tags for SIGI_STATE or similar
-        for (const script of Array.from(document.querySelectorAll('script'))) {
-          const text = script.textContent ?? '';
-          if (!text.includes('"videoList"')) continue;
-          const m = text.match(/"items"\s*:\s*(\[[\s\S]+?\])\s*,\s*"cursor"/);
-          if (m) {
-            try { return JSON.parse(m[1]); } catch { /* continue */ }
+        // ── Method 2: scan all scripts for video arrays ──
+        if (!info.videos) {
+          for (const script of Array.from(document.querySelectorAll('script'))) {
+            const text = script.textContent ?? '';
+            if (text.length < 100 || text.length > 5_000_000) continue;
+            // Look for arrays with TikTok video shape: id + stats + createTime
+            const m = text.match(/"id"\s*:\s*"\d{15,}".{0,200}"createTime"\s*:\s*\d+/);
+            if (!m) continue;
+            // Try to extract the surrounding array
+            const arrMatch = text.match(/\[\s*\{[^[]*?"id"\s*:\s*"\d{15,}"[\s\S]{0,50000}?\]\s*[,}]/);
+            if (arrMatch) {
+              try {
+                const arr = JSON.parse(arrMatch[0].replace(/[,}]$/, ']').replace(/^([^[]+)/, '['));
+                if (Array.isArray(arr) && arr.length > 0 && arr[0].id) {
+                  info.videos = arr;
+                  break;
+                }
+              } catch { /* continue */ }
+            }
           }
         }
-        return null;
+
+        // ── Method 3: DOM extraction fallback ──
+        if (!info.videos) {
+          const videoEls = document.querySelectorAll('[data-e2e="user-post-item"], [class*="DivItemContainer"]');
+          if (videoEls.length > 0) {
+            info.videos = Array.from(videoEls).map(el => {
+              const a = el.querySelector<HTMLAnchorElement>('a[href*="/video/"]');
+              const url = a?.href ?? '';
+              const idMatch = url.match(/\/video\/(\d+)/);
+              return { id: idMatch?.[1] ?? '', _url: url, desc: el.querySelector('img')?.getAttribute('alt') ?? '' };
+            }).filter(v => v.id);
+          }
+        }
+
+        return info;
       });
 
-      const pageState = await page.evaluate(() => ({
-        title: document.title,
-        url: window.location.href,
-        hasCaptcha: !!document.querySelector('[class*="captcha"], [id*="captcha"]'),
-      }));
+      console.log(`tiktok browser @${username}: title="${result.title}", captcha=${result.hasCaptcha}, scopeKeys=${JSON.stringify(result.scopeKeys)}, videos=${(result.videos as unknown[] | null)?.length ?? 0}`);
 
-      console.log(`tiktok browser @${username}: title="${pageState.title}", captcha=${pageState.hasCaptcha}, videos=${videos?.length ?? 0}`);
+      if (result.hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
 
-      if (pageState.hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
-      if (!videos || !videos.length) throw new Error(`TikTok: 0 videos found for @${username} (title="${pageState.title}")`);
+      const videos = result.videos as TikTokVideo[] | null;
+      if (!videos?.length) {
+        throw new Error(
+          `TikTok: 0 videos for @${username} ` +
+          `(title="${result.title}", scopeKeys=${JSON.stringify(result.scopeKeys)})`
+        );
+      }
 
-      return this.convertVideos(videos as TikTokVideo[], username, sinceCursor);
+      return this.convertVideos(videos, username, sinceCursor);
     } finally {
       await browser.close();
     }
@@ -189,9 +242,12 @@ export class TikTokConnector extends BaseConnector {
       const publishTime = video.createTime
         ? new Date(video.createTime * 1000).toISOString()
         : null;
+      // Support DOM-extracted items that carry _url directly
+      const videoUrl = (video as Record<string, unknown>)['_url'] as string | undefined
+        ?? `https://www.tiktok.com/@${authorHandle}/video/${video.id}`;
 
       rawItems.push({
-        url: `https://www.tiktok.com/@${authorHandle}/video/${video.id}`,
+        url: videoUrl,
         title: null,
         textContent: video.desc || null,
         publishTime,
