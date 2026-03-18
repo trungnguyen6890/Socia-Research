@@ -34,17 +34,21 @@ export class FacebookBrowserConnector extends BaseConnector {
   private parseCookies(): Array<{ name: string; value: string; domain: string; path: string }> {
     const raw = this.env.FB_COOKIES?.trim();
     if (!raw) return [];
+
+    // URL-decode cookie values — browser DevTools copies them encoded (e.g. %3A → :)
+    const decode = (v: string) => { try { return decodeURIComponent(v); } catch { return v; } };
+
     if (raw.startsWith('[')) {
       try {
         const arr = JSON.parse(raw) as Array<{ name: string; value: string; domain?: string; path?: string }>;
-        return arr.map(c => ({ name: c.name, value: c.value, domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }));
+        return arr.map(c => ({ name: c.name, value: decode(c.value), domain: c.domain ?? '.facebook.com', path: c.path ?? '/' }));
       } catch { /* fall through */ }
     }
     return raw.split(';').flatMap(pair => {
       const [name, ...rest] = pair.trim().split('=');
       const value = rest.join('=').trim();
       if (!name?.trim() || !value) return [];
-      return [{ name: name.trim(), value, domain: '.facebook.com', path: '/' }];
+      return [{ name: name.trim(), value: decode(value), domain: '.facebook.com', path: '/' }];
     });
   }
 
