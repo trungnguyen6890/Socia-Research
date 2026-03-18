@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import structlog
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,18 +25,62 @@ from src.utils.rate_limiter import RateLimiter
 
 logger = structlog.get_logger()
 
+# Global concurrency control — limits how many pipeline jobs run in parallel.
+# Prevents: file descriptor exhaustion, SQLite write contention, memory spikes.
+# Default 20 is safe for most systems; tunable via set_max_concurrency().
+_pipeline_semaphore: asyncio.Semaphore | None = None
+_max_concurrency: int = 20
+
+
+def set_max_concurrency(n: int) -> None:
+    """Set the max number of concurrent pipeline jobs. Call before scheduler start."""
+    global _max_concurrency, _pipeline_semaphore
+    _max_concurrency = n
+    _pipeline_semaphore = None  # Reset so next call creates fresh semaphore
+
+
+def _get_semaphore() -> asyncio.Semaphore:
+    """Lazy-init semaphore (must be created inside a running event loop)."""
+    global _pipeline_semaphore
+    if _pipeline_semaphore is None:
+        _pipeline_semaphore = asyncio.Semaphore(_max_concurrency)
+    return _pipeline_semaphore
+
 
 async def run_source_pipeline(
     source_id: str,
     session: AsyncSession,
     rate_limiter: RateLimiter,
+    http_client: httpx.AsyncClient | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
     """Run the full pipeline for a single source.
 
     Pipeline: fetch -> normalize -> dedupe -> tag -> score -> store
-    Returns summary dict with status and counts.
+
+    Args:
+        source_id: Source to fetch.
+        session: DB session (caller manages lifecycle).
+        rate_limiter: Shared rate limiter.
+        http_client: Optional shared HTTP client. If None, one is created per call.
+        dry_run: If True, skip DB writes.
+
+    Returns:
+        Summary dict with status and counts.
     """
+    async with _get_semaphore():
+        return await _run_pipeline_inner(
+            source_id, session, rate_limiter, http_client, dry_run
+        )
+
+
+async def _run_pipeline_inner(
+    source_id: str,
+    session: AsyncSession,
+    rate_limiter: RateLimiter,
+    http_client: httpx.AsyncClient | None,
+    dry_run: bool,
+) -> dict[str, Any]:
     # Load source
     source = await session.get(Source, source_id)
     if source is None:
@@ -55,12 +101,18 @@ async def run_source_pipeline(
         await session.flush()
 
     try:
-        # 1. Fetch via connector
-        async with create_http_client() as http_client:
+        # 1. Fetch via connector — use shared client or create one
+        if http_client is not None:
             connector = get_connector(source, http_client, rate_limiter)
             items_raw, new_cursor = await connector.fetch_and_normalize(
                 since_cursor=source.last_cursor
             )
+        else:
+            async with create_http_client() as client:
+                connector = get_connector(source, client, rate_limiter)
+                items_raw, new_cursor = await connector.fetch_and_normalize(
+                    since_cursor=source.last_cursor
+                )
 
         logger.info("fetched_items", source_id=source_id, count=len(items_raw))
 
