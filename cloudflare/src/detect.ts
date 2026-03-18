@@ -87,10 +87,10 @@ function detectByPattern(input: string): DetectResult | null {
   const igMatch = input.match(/instagram\.com\/@?([\w.]+)/i);
   if (igMatch) return hi('instagram_pro', igMatch[1], 'provider_api', {}, 'Instagram — requires IG_ACCESS_TOKEN');
 
-  // TikTok — watch-only
-  if (/tiktok\.com\//i.test(input)) {
-    return { connector_type: 'tiktok_watch', url_or_handle: input, source_mode: 'manual_watch', config: {}, confidence: 'high', note: 'TikTok — watch-only, no automated fetch' };
-  }
+  // TikTok
+  const ttMatch = input.match(/tiktok\.com\/@?([^/?#\s]+)/i);
+  if (ttMatch) return hi('tiktok', `@${ttMatch[1].replace(/^@/, '')}`, 'website_parse', {}, 'TikTok — HTTP SSR fetch + CF Browser fallback');
+  if (/tiktok\.com/i.test(input)) return hi('tiktok', input, 'website_parse', {}, 'TikTok — HTTP SSR fetch + CF Browser fallback');
 
   // Threads — watch-only
   if (/threads\.net\//i.test(input)) {

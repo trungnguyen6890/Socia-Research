@@ -24,6 +24,7 @@ export type ConnectorType =
   | 'facebook_page'
   | 'facebook_browser'
   | 'instagram_pro'
+  | 'tiktok'
   | 'facebook_profile_watch'
   | 'tiktok_watch'
   | 'threads_watch';

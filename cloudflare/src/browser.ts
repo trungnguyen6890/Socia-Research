@@ -30,4 +30,4 @@ export async function launchBrowser(
   throw new Error('unreachable');
 }
 
-export const BROWSER_CONNECTOR_TYPES = new Set(['x_browser', 'telegram', 'facebook_browser']);
+export const BROWSER_CONNECTOR_TYPES = new Set(['x_browser', 'telegram', 'facebook_browser', 'tiktok']);
