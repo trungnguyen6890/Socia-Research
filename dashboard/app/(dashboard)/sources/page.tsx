@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { getSources, runSource, toggleSource, deleteSource, updateSource, createSource } from '@/lib/api';
+import { getSources, runSource, toggleSource, deleteSource, updateSource, createSource, detectSource } from '@/lib/api';
 import { fmtDate, fmtRelative, jsonSafe, CONNECTOR_COLORS, cn } from '@/lib/utils';
 import { parseSourcesFromText, CONNECTOR_LABEL } from '@/lib/source-parser';
 import type { ParsedSource } from '@/lib/source-parser';
@@ -305,8 +305,9 @@ function BulkAddModal({
   const [saving, setSaving] = useState(false);
   const [step, setStep] = useState<'input' | 'preview'>('input');
   const [failedLines, setFailedLines] = useState<string[]>([]);
+  const [probing, setProbing] = useState<Set<number>>(new Set());
 
-  const handleParse = useCallback(() => {
+  const handleParse = useCallback(async () => {
     const lines = text
       .split(/[\n,]+/)
       .map((l) => l.trim())
@@ -320,6 +321,41 @@ function BulkAddModal({
     setEdits({});
     setFailedLines(failed);
     setStep('preview');
+
+    // For URLs that fell back to "website", probe the server for RSS detection
+    const websiteIdxs = results
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => r.connector_type === 'website');
+
+    if (websiteIdxs.length === 0) return;
+
+    setProbing(new Set(websiteIdxs.map(({ i }) => i)));
+
+    await Promise.all(
+      websiteIdxs.map(async ({ r, i }) => {
+        try {
+          const detected = await detectSource(r.raw_input);
+          // Only upgrade if server found something better than "website"
+          if (detected.connector_type !== 'website' || detected.confidence !== 'low') {
+            setParsed(prev => prev.map((item, idx) =>
+              idx === i
+                ? {
+                    ...item,
+                    connector_type: detected.connector_type,
+                    url_or_handle: detected.url_or_handle,
+                    source_mode: detected.source_mode,
+                    confidence: detected.confidence,
+                  }
+                : item
+            ));
+          }
+        } catch {
+          // Keep original client-side result on error
+        } finally {
+          setProbing(prev => { const next = new Set(prev); next.delete(i); return next; });
+        }
+      })
+    );
   }, [text]);
 
   const getRow = (i: number): ParsedSource => ({ ...parsed[i], ...edits[i] });
@@ -411,15 +447,22 @@ function BulkAddModal({
                 <div className="space-y-2">
                   {parsed.map((_, i) => {
                     const row = getRow(i);
+                    const isProbing = probing.has(i);
                     return (
-                      <div key={i} className="border border-neutral-200 rounded-md p-3 space-y-2.5">
+                      <div key={i} className={cn('border rounded-md p-3 space-y-2.5', isProbing ? 'border-neutral-200 opacity-70' : 'border-neutral-200')}>
                         <div className="flex items-start gap-2">
+                          {isProbing ? (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 mt-0.5 bg-neutral-100 text-neutral-400 animate-pulse">
+                              Detecting…
+                            </span>
+                          ) : (
                           <span className={cn(
                             'text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 mt-0.5',
                             CONNECTOR_COLORS[row.connector_type] ?? 'bg-neutral-100 text-neutral-600'
                           )}>
                             {CONNECTOR_LABEL[row.connector_type] ?? row.connector_type}
                           </span>
+                          )}
                           <span className="text-[11px] text-neutral-400 truncate flex-1">{row.raw_input}</span>
                           <button
                             onClick={() => removeRow(i)}
@@ -507,7 +550,7 @@ function BulkAddModal({
                   Cancel
                 </button>
                 <button
-                  onClick={handleParse}
+                  onClick={() => { void handleParse(); }}
                   disabled={!text.trim()}
                   className="text-[13px] px-4 py-1.5 rounded-md bg-neutral-900 text-white hover:bg-neutral-800 disabled:opacity-50 transition-colors"
                 >

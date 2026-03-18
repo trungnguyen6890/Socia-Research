@@ -127,3 +127,19 @@ export async function toggleSource(sourceId: string): Promise<{ id: string; is_a
 export async function deleteSource(sourceId: string): Promise<void> {
   await apiFetch(`/api/sources/${sourceId}`, { method: 'DELETE' });
 }
+
+export interface DetectResult {
+  connector_type: string;
+  url_or_handle: string;
+  source_mode: string;
+  config: Record<string, unknown>;
+  confidence: 'high' | 'medium' | 'low';
+  note: string;
+}
+
+export async function detectSource(url: string): Promise<DetectResult> {
+  return apiFetch('/api/detect-source', {
+    method: 'POST',
+    body: JSON.stringify({ url }),
+  });
+}
