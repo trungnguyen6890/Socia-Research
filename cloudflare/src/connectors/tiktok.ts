@@ -124,19 +124,19 @@ export class TikTokConnector extends BaseConnector {
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
 
       await page.goto(`https://www.tiktok.com/@${username}`, {
-        waitUntil: 'domcontentloaded',
+        waitUntil: 'networkidle2',
         timeout: 30000,
       });
 
-      // Wait for video grid or JSON script to appear
-      await page.waitForSelector(
-        '[data-e2e="user-post-item"], [data-e2e="user-post-item-list"], #__UNIVERSAL_DATA_FOR_REHYDRATION__',
-        { timeout: 15000 }
-      ).catch(() => {});
+      // Scroll to trigger lazy-loaded video grid, then wait for XHR to settle
+      await page.evaluate(() => window.scrollBy(0, 600));
+      await new Promise(r => setTimeout(r, 4000));
 
-      // Scroll to trigger lazy-loaded video grid
-      await page.evaluate(() => window.scrollBy(0, 800));
-      await new Promise(r => setTimeout(r, 3000));
+      // Wait explicitly for video items if not yet visible
+      await page.waitForSelector(
+        'a[href*="/video/"], [data-e2e="user-post-item"]',
+        { timeout: 8000 }
+      ).catch(() => {});
 
       const result = await page.evaluate(() => {
         const info: Record<string, unknown> = {
