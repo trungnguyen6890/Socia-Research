@@ -124,10 +124,16 @@ export class TikTokConnector extends BaseConnector {
       await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true });
 
       await page.goto(`https://www.tiktok.com/@${username}`, {
-        waitUntil: 'networkidle2',
+        waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
-      await new Promise(r => setTimeout(r, 4000));
+
+      // Wait for video grid or JSON data to be available
+      await page.waitForSelector(
+        '[data-e2e="user-post-item"], [data-e2e="user-post-item-list"], #__UNIVERSAL_DATA_FOR_REHYDRATION__',
+        { timeout: 15000 }
+      ).catch(() => {});
+      await new Promise(r => setTimeout(r, 3000));
 
       const result = await page.evaluate(() => {
         const info: Record<string, unknown> = {
@@ -191,16 +197,26 @@ export class TikTokConnector extends BaseConnector {
           }
         }
 
-        // ── Method 3: DOM extraction fallback ──
+        // ── Method 3: DOM — extract all /video/ links on the page ──
         if (!info.videos) {
-          const videoEls = document.querySelectorAll('[data-e2e="user-post-item"], [class*="DivItemContainer"]');
-          if (videoEls.length > 0) {
-            info.videos = Array.from(videoEls).map(el => {
-              const a = el.querySelector<HTMLAnchorElement>('a[href*="/video/"]');
-              const url = a?.href ?? '';
-              const idMatch = url.match(/\/video\/(\d+)/);
-              return { id: idMatch?.[1] ?? '', _url: url, desc: el.querySelector('img')?.getAttribute('alt') ?? '' };
-            }).filter(v => v.id);
+          const seen = new Set<string>();
+          const domVideos: Array<Record<string, unknown>> = [];
+          document.querySelectorAll<HTMLAnchorElement>('a[href*="/video/"]').forEach(a => {
+            const href = a.href;
+            const idMatch = href.match(/\/video\/(\d+)/);
+            if (!idMatch || seen.has(idMatch[1])) return;
+            seen.add(idMatch[1]);
+            // Try to get alt text from nearby img (caption)
+            const img = a.querySelector('img') ?? a.closest('[data-e2e]')?.querySelector('img');
+            domVideos.push({
+              id: idMatch[1],
+              _url: href.split('?')[0],
+              desc: img?.getAttribute('alt') ?? '',
+            });
+          });
+          if (domVideos.length > 0) {
+            info.videos = domVideos;
+            info.method = 'dom';
           }
         }
 
