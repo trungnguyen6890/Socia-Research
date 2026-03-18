@@ -9,6 +9,7 @@ export interface Env {
   X_BEARER_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
   FB_ACCESS_TOKEN?: string;
+  FB_COOKIES?: string;
   IG_ACCESS_TOKEN?: string;
 }
 
@@ -18,11 +19,10 @@ export type ConnectorType =
   | 'rss'
   | 'website'
   | 'youtube'
-  | 'x_twitter'
-  | 'x_rss'
   | 'x_browser'
   | 'telegram'
   | 'facebook_page'
+  | 'facebook_browser'
   | 'instagram_pro'
   | 'facebook_profile_watch'
   | 'tiktok_watch'
@@ -110,6 +110,15 @@ export interface ContentItemRow {
   quality_score: number;
   signal_score: number;
   raw_data: string | null;             // JSON
+  // Enrichment fields
+  content_type: string | null;
+  language: string | null;
+  author_name: string | null;
+  has_media: number;
+  is_truncated: number;
+  // Joined from sources
+  source_name?: string;
+  source_mode?: string;
 }
 
 export interface RunLogRow {
@@ -137,6 +146,10 @@ export interface RawItem {
   publishTime?: string | null;
   engagementSnapshot?: Record<string, number | string> | null;
   rawData?: Record<string, unknown>;
+  // Enrichment hints from connectors (normalize.ts uses these or auto-derives)
+  contentType?: string | null;
+  authorName?: string | null;
+  hasMedia?: boolean;
 }
 
 export interface NormalizedItem {
@@ -156,4 +169,10 @@ export interface NormalizedItem {
   quality_score: number;
   signal_score: number;
   raw_data: string | null;
+  // Enrichment fields
+  content_type: string | null;
+  language: string | null;
+  author_name: string | null;
+  has_media: boolean;
+  is_truncated: boolean;
 }

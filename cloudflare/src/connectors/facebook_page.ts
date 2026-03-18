@@ -29,6 +29,9 @@ export class FacebookPageConnector extends BaseConnector {
         title: null,
         textContent: post.message ?? null,
         publishTime: post.created_time,
+        contentType: 'post',
+        authorName: this.source.name,
+        hasMedia: false,
         engagementSnapshot: {
           likes: post.likes?.summary?.total_count ?? 0,
           shares: post.shares?.count ?? 0,

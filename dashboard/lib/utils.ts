@@ -41,10 +41,11 @@ export const CONNECTOR_COLORS: Record<string, string> = {
   rss: 'bg-orange-50 text-orange-700',
   website: 'bg-blue-50 text-blue-700',
   youtube: 'bg-red-50 text-red-700',
-  x_twitter: 'bg-neutral-100 text-neutral-700',
-  x_rss: 'bg-neutral-100 text-neutral-700',
   x_browser: 'bg-violet-50 text-violet-700',
   telegram: 'bg-sky-50 text-sky-700',
   facebook_page: 'bg-indigo-50 text-indigo-700',
+  facebook_browser: 'bg-indigo-50 text-indigo-700',
   instagram_pro: 'bg-pink-50 text-pink-700',
+  tiktok_watch: 'bg-neutral-100 text-neutral-700',
+  threads_watch: 'bg-neutral-100 text-neutral-700',
 };

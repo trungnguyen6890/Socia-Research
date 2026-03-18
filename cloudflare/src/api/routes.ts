@@ -4,9 +4,59 @@ import { Env } from '../types';
 import {
   getSources, getSource, upsertSource, getKeywords, getGoals, getSchedules,
   getContentItems, getRecentRuns, getAllSettings, setSetting,
-  dbFirst, dbRun,
+  dbFirst, dbRun, jsonParse,
 } from '../db';
 import { runSourcePipeline } from '../pipeline/runner';
+
+// ─── Content item schema helpers ─────────────────────────────────────────────
+
+const PLATFORM_MAP: Record<string, string> = {
+  x_browser: 'twitter',
+  youtube: 'youtube',
+  facebook_page: 'facebook', facebook_browser: 'facebook', facebook_profile_watch: 'facebook',
+  instagram_pro: 'instagram',
+  telegram: 'telegram',
+  tiktok_watch: 'tiktok',
+  threads_watch: 'threads',
+  rss: 'rss',
+  website: 'website',
+};
+
+function toPlatform(connectorType: string): string {
+  return PLATFORM_MAP[connectorType] ?? connectorType;
+}
+
+function formatContentItem(row: Record<string, unknown>) {
+  const connectorType = row.connector_type as string;
+  const engagement = jsonParse<Record<string, number>>(row.engagement_snapshot as string | null, {});
+  return {
+    id: row.id,
+    platform: toPlatform(connectorType),
+    source: row.source_name ?? null,
+    source_type: connectorType,
+    url: row.url,
+    title: row.title ?? null,
+    content_text: row.text_content ?? null,
+    published_at: row.publish_time ?? null,
+    engagement: {
+      likes: Number(engagement.likes ?? 0),
+      comments: Number(engagement.comments ?? engagement.replies ?? 0),
+      shares: Number(engagement.shares ?? engagement.retweets ?? engagement.forwards ?? 0),
+      views: Number(engagement.views ?? 0),
+      reactions: Number(engagement.reactions ?? 0),
+    },
+    content_type: row.content_type ?? null,
+    language: row.language ?? null,
+    author_name: row.author_name ?? null,
+    has_media: Boolean(row.has_media),
+    duplicate_key: row.is_duplicate ? (row.duplicate_of_id ?? row.content_hash ?? null) : null,
+    is_truncated: Boolean(row.is_truncated),
+    tags: jsonParse<string[]>(row.tags as string | null, []),
+    quality_score: Number(row.quality_score ?? 0),
+    signal_score: Number(row.signal_score ?? 0),
+    fetch_time: row.fetch_time ?? null,
+  };
+}
 
 export function createApiRouter() {
   const api = new Hono<{ Bindings: Env }>();
@@ -127,7 +177,10 @@ export function createApiRouter() {
     const result = await getContentItems(c.env, {
       page, pageSize: 50, sourceId, search, minScore, hideDuplicates: hideDups,
     });
-    return c.json(result);
+    return c.json({
+      items: result.items.map((row) => formatContentItem(row as Record<string, unknown>)),
+      total: result.total,
+    });
   });
 
   // ─── Keywords ─────────────────────────────────────────────────────────────

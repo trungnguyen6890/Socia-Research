@@ -1,5 +1,5 @@
-import puppeteer from '@cloudflare/puppeteer';
 import { BaseConnector } from './base';
+import { launchBrowser } from '../browser';
 import { FetchResult, RawItem } from '../types';
 
 /**
@@ -36,7 +36,7 @@ export class XBrowserConnector extends BaseConnector {
 
     // All strategies share ONE browser session to avoid CF Browser Rendering rate limits.
     // Opening multiple browsers per source is the primary cause of 429 errors.
-    const browser = await puppeteer.launch(this.env.BROWSER);
+    const browser = await launchBrowser(this.env);
     try {
       const page = await browser.newPage();
       await page.setUserAgent(
@@ -199,6 +199,9 @@ export class XBrowserConnector extends BaseConnector {
         title: null,
         textContent: tweet.text || null,
         publishTime: this.parseDate(tweet.date),
+        contentType: 'tweet',
+        authorName: username,
+        hasMedia: false,
         engagementSnapshot: {
           replies: tweet.replies,
           retweets: tweet.retweets,

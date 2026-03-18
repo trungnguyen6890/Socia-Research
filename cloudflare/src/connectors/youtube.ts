@@ -43,6 +43,9 @@ export class YouTubeConnector extends BaseConnector {
         title: s.title,
         textContent: s.description,
         publishTime: s.publishedAt,
+        contentType: 'video',
+        authorName: s.channelTitle ?? null,
+        hasMedia: true,
         engagementSnapshot: {
           views: Number(stats.viewCount ?? 0),
           likes: Number(stats.likeCount ?? 0),
@@ -89,6 +92,7 @@ interface PlaylistItem {
     publishedAt: string;
     title: string;
     description: string;
+    channelTitle?: string;
     resourceId: { videoId: string };
   };
 }

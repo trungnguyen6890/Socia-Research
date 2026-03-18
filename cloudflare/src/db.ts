@@ -131,12 +131,15 @@ export async function insertContentItem(env: Env, item: Record<string, unknown>)
     `INSERT OR IGNORE INTO content_items
      (id, source_id, connector_type, url, canonical_url, title, text_content,
       publish_time, fetch_time, engagement_snapshot, tags, content_hash,
-      is_duplicate, duplicate_of_id, quality_score, signal_score, raw_data)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?)`,
+      is_duplicate, duplicate_of_id, quality_score, signal_score, raw_data,
+      content_type, language, author_name, author_verified, has_media, is_truncated)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     item.id, item.source_id, item.connector_type, item.url, item.canonical_url,
     item.title, item.text_content, item.publish_time, item.engagement_snapshot,
     item.tags, item.content_hash, item.is_duplicate ? 1 : 0, item.duplicate_of_id,
     item.quality_score, item.signal_score, item.raw_data,
+    item.content_type ?? null, item.language ?? null, item.author_name ?? null,
+    item.author_verified ? 1 : 0, item.has_media ? 1 : 0, item.is_truncated ? 1 : 0,
   );
 }
 
@@ -181,7 +184,7 @@ export async function getContentItems(env: Env, opts: {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const [items, countRow] = await Promise.all([
     dbAll(env,
-      `SELECT c.*, s.name as source_name FROM content_items c LEFT JOIN sources s ON s.id = c.source_id ${where.replace(/\b(source_id|title|text_content|quality_score|is_duplicate)\b/g, 'c.$1')} ORDER BY c.fetch_time DESC LIMIT ? OFFSET ?`,
+      `SELECT c.*, s.name as source_name, s.source_mode FROM content_items c LEFT JOIN sources s ON s.id = c.source_id ${where.replace(/\b(source_id|title|text_content|quality_score|is_duplicate)\b/g, 'c.$1')} ORDER BY c.fetch_time DESC LIMIT ? OFFSET ?`,
       ...params, pageSize, offset),
     dbFirst<{ total: number }>(env,
       `SELECT COUNT(*) as total FROM content_items c ${where.replace(/\b(source_id|title|text_content|quality_score|is_duplicate)\b/g, 'c.$1')}`, ...params),

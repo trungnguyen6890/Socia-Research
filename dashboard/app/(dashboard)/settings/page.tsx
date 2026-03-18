@@ -6,26 +6,42 @@ import type { Settings } from '@/lib/types';
 import PageHeader from '@/components/page-header';
 import { fmtDate } from '@/lib/utils';
 
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
+
+function formatHour(h: number) {
+  return `${String(h).padStart(2, '0')}:00 UTC`;
+}
+
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [interval, setInterval_] = useState('30');
   const [enabled, setEnabled] = useState(true);
+  const [selectedHours, setSelectedHours] = useState<number[]>([3, 12]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     getSettings().then(s => {
       setSettings(s);
-      setInterval_(s.cron_interval_minutes);
       setEnabled(s.cron_enabled === '1');
+      const hours = (s.cron_hours || '3,12')
+        .split(',')
+        .map((h) => Number(h.trim()))
+        .filter((h) => !isNaN(h) && h >= 0 && h <= 23);
+      setSelectedHours(hours);
     });
   }, []);
+
+  const toggleHour = (h: number) => {
+    setSelectedHours(prev =>
+      prev.includes(h) ? prev.filter(x => x !== h) : [...prev, h].sort((a, b) => a - b)
+    );
+  };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await updateSettings({
-        cron_interval_minutes: interval,
+        cron_hours: selectedHours.join(','),
         cron_enabled: enabled ? '1' : '0',
       });
       setSaved(true);
@@ -55,7 +71,7 @@ export default function SettingsPage() {
         <div className="block-section px-5 py-5">
           <h3 className="text-[13px] font-medium text-neutral-800 mb-4">Cron Schedule</h3>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-[13px] text-neutral-700">Auto-fetch enabled</p>
@@ -72,20 +88,34 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="text-[13px] text-neutral-700 block mb-1.5">Fetch interval (minutes)</label>
-              <select
-                value={interval}
-                onChange={(e) => setInterval_(e.target.value)}
-                className="text-[13px] px-3 py-1.5 border border-neutral-200 rounded-md bg-white text-neutral-600 focus:outline-none focus:border-neutral-400"
-              >
-                {['5', '10', '15', '30', '60', '120', '360', '720', '1440'].map(v => (
-                  <option key={v} value={v}>
-                    {Number(v) < 60 ? `${v} min` : `${Number(v) / 60} hour${Number(v) / 60 > 1 ? 's' : ''}`}
-                  </option>
+              <label className="text-[13px] text-neutral-700 block mb-2">
+                Run hours (UTC)
+                {selectedHours.length > 0 && (
+                  <span className="ml-2 text-[11px] text-neutral-400 font-normal">
+                    — {selectedHours.length} time{selectedHours.length > 1 ? 's' : ''}/day
+                  </span>
+                )}
+              </label>
+              <div className="grid grid-cols-6 gap-1.5">
+                {ALL_HOURS.map(h => (
+                  <button
+                    key={h}
+                    onClick={() => toggleHour(h)}
+                    className={`text-[11px] py-1 rounded border transition-colors ${
+                      selectedHours.includes(h)
+                        ? 'bg-neutral-900 text-white border-neutral-900'
+                        : 'bg-white text-neutral-500 border-neutral-200 hover:border-neutral-400'
+                    }`}
+                  >
+                    {String(h).padStart(2, '0')}h
+                  </button>
                 ))}
-              </select>
-              <p className="text-[11px] text-neutral-400 mt-1">
-                Worker cron ticks every 5 minutes. This setting controls the minimum gap between runs.
+              </div>
+              <p className="text-[11px] text-neutral-400 mt-2">
+                Worker triggers every hour. Job only runs at the selected hours above.
+                {selectedHours.length > 0 && (
+                  <> Current schedule: {selectedHours.map(formatHour).join(', ')}.</>
+                )}
               </p>
             </div>
 

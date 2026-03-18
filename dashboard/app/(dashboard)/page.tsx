@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getDashboardStats, getRecentRuns, getContent, getSources } from '@/lib/api';
-import { fmtRelative, jsonSafe, CONNECTOR_COLORS, cn } from '@/lib/utils';
+import { fmtRelative, CONNECTOR_COLORS, cn } from '@/lib/utils';
 import type { DashboardStats, RunLog, ContentItem, Source } from '@/lib/types';
 import PageHeader from '@/components/page-header';
 import Badge from '@/components/badge';
@@ -125,25 +125,23 @@ export default function DashboardPage() {
           <Link href="/content" className="text-xs text-neutral-400 hover:text-neutral-600">View all →</Link>
         </div>
         <div className="block-section divide-y divide-neutral-100">
-          {content.slice(0, 5).map((item) => {
-            const tags: string[] = jsonSafe(item.tags, []);
-            return (
+          {content.slice(0, 5).map((item) => (
               <div key={item.id} className="px-4 py-3 hover:bg-neutral-50/50 transition-colors">
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <Badge className={cn(CONNECTOR_COLORS[item.connector_type])}>{item.connector_type}</Badge>
-                      <span className="text-[11px] text-neutral-400">{item.source_name}</span>
+                      <Badge className={cn(CONNECTOR_COLORS[item.source_type])}>{item.source_type}</Badge>
+                      <span className="text-[11px] text-neutral-400">{item.source}</span>
                       <span className="text-[11px] text-neutral-300">·</span>
-                      <span className="text-[11px] text-neutral-400">{fmtRelative(item.publish_time ?? item.fetch_time)}</span>
+                      <span className="text-[11px] text-neutral-400">{fmtRelative(item.published_at ?? item.fetch_time)}</span>
                     </div>
                     <p className="text-sm font-medium text-neutral-800">{item.title ?? 'Untitled'}</p>
-                    {item.text_content && (
-                      <p className="text-[13px] text-neutral-500 mt-0.5 line-clamp-2">{item.text_content}</p>
+                    {item.content_text && (
+                      <p className="text-[13px] text-neutral-500 mt-0.5 line-clamp-2">{item.content_text}</p>
                     )}
-                    {tags.length > 0 && (
+                    {item.tags.length > 0 && (
                       <div className="flex gap-1 mt-1.5">
-                        {tags.map(t => <span key={t} className="text-[10px] text-neutral-400 bg-neutral-50 px-1.5 py-0.5 rounded">{t}</span>)}
+                        {item.tags.map(t => <span key={t} className="text-[10px] text-neutral-400 bg-neutral-50 px-1.5 py-0.5 rounded">{t}</span>)}
                       </div>
                     )}
                   </div>
@@ -153,8 +151,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               </div>
-            );
-          })}
+          ))}
         </div>
       </div>
     </>

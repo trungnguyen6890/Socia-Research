@@ -35,23 +35,24 @@ export interface Goal {
 
 export interface ContentItem {
   id: string;
-  source_id: string;
-  connector_type: string;
+  platform: string;
+  source: string | null;
+  source_type: string;
   url: string;
-  canonical_url: string | null;
   title: string | null;
-  text_content: string | null;
-  publish_time: string | null;
-  fetch_time: string;
-  engagement_snapshot: string | null;
-  tags: string;
-  content_hash: string | null;
-  is_duplicate: number;
-  duplicate_of_id: string | null;
+  content_text: string | null;
+  published_at: string | null;
+  fetch_time: string | null;
+  engagement: { likes: number; comments: number; shares: number; views: number; reactions: number };
+  content_type: string | null;
+  language: string | null;
+  author_name: string | null;
+  has_media: boolean;
+  duplicate_key: string | null;
+  is_truncated: boolean;
+  tags: string[];
   quality_score: number;
   signal_score: number;
-  raw_data: string | null;
-  source_name?: string;
 }
 
 export interface RunLog {
@@ -77,7 +78,7 @@ export interface Schedule {
 }
 
 export interface Settings {
-  cron_interval_minutes: string;
+  cron_hours: string;
   cron_enabled: string;
   last_cron_run_at?: string;
 }

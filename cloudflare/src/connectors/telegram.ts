@@ -1,75 +1,166 @@
 import { BaseConnector } from './base';
+import { launchBrowser } from '../browser';
 import { FetchResult, RawItem } from '../types';
 
 /**
- * Telegram connector using the Bot API.
- * source.url_or_handle = channel username (e.g. @channelname or channelname)
- * Requires bot to be added as admin to the channel.
+ * Telegram public channel connector via t.me/s/{channel} + Puppeteer.
+ *
+ * Approach summary:
+ * - gramjs/MTProto: NOT viable in CF Workers (gramjs only has TCP transport,
+ *   CF Workers has no outbound raw socket support).
+ * - Bot API (getUpdates): only works when bot is a member — useless for
+ *   monitoring arbitrary public channels.
+ * - t.me/s/{channel}: Telegram's official public channel preview, loads posts
+ *   via JS → render with Puppeteer. No auth, works for any public channel.
+ *
+ * source.url_or_handle — @channelname, channelname, or https://t.me/channelname
+ *
+ * config keys:
+ *   max_results    — max posts per fetch (default: 20)
+ *   lookback_days  — ignore posts older than N days (default: 7)
  */
-const BASE = 'https://api.telegram.org';
-
 export class TelegramConnector extends BaseConnector {
-  async fetch(sinceCursor: string | null): Promise<FetchResult> {
-    const token = this.env.TELEGRAM_BOT_TOKEN;
-    if (!token) throw new Error('TELEGRAM_BOT_TOKEN not set');
 
-    const chatId = this.source.url_or_handle.startsWith('@')
-      ? this.source.url_or_handle
-      : `@${this.source.url_or_handle}`;
-
-    const params = new URLSearchParams({
-      chat_id: chatId,
-      limit: String(this.maxResults()),
-      ...(sinceCursor ? { offset: sinceCursor } : {}),
-    });
-
-    const res = await this.rateLimitedFetch(
-      `${BASE}/bot${token}/getUpdates?${params}`,
-    );
-    if (!res.ok) throw new Error(`Telegram API failed: ${res.status}`);
-    const data: { ok: boolean; result: TelegramUpdate[] } = await res.json();
-
-    if (!data.ok) throw new Error('Telegram API returned ok=false');
-
-    let latestOffset: string | null = null;
-    const rawItems: RawItem[] = [];
-
-    for (const update of data.result) {
-      const msg = update.channel_post ?? update.message;
-      if (!msg) continue;
-
-      latestOffset = String(update.update_id + 1);
-      const channelName = this.source.url_or_handle.replace('@', '');
-      const url = `https://t.me/${channelName}/${msg.message_id}`;
-
-      rawItems.push({
-        url,
-        title: null,
-        textContent: msg.text ?? msg.caption ?? null,
-        publishTime: new Date(msg.date * 1000).toISOString(),
-        engagementSnapshot: {
-          views: msg.views ?? 0,
-          forwards: msg.forward_count ?? 0,
-        },
-        rawData: update as unknown as Record<string, unknown>,
-      });
-    }
-
-    return { rawItems, newCursor: latestOffset ?? sinceCursor };
+  private extractHandle(): string {
+    let h = this.source.url_or_handle.trim();
+    h = h.replace(/^https?:\/\/t\.me\//i, '');
+    h = h.replace(/^@/, '').split('/')[0];
+    return h;
   }
-}
 
-interface TelegramMessage {
-  message_id: number;
-  date: number;
-  text?: string;
-  caption?: string;
-  views?: number;
-  forward_count?: number;
-}
+  async fetch(sinceCursor: string | null): Promise<FetchResult> {
+    const handle = this.extractHandle();
+    if (!handle) throw new Error('No Telegram channel handle in url_or_handle');
 
-interface TelegramUpdate {
-  update_id: number;
-  message?: TelegramMessage;
-  channel_post?: TelegramMessage;
+    const lookbackDays = (this.config.lookback_days as number) ?? 7;
+    const cutoffMs = Date.now() - lookbackDays * 86_400_000;
+    const sinceId = sinceCursor ? Number(sinceCursor) : 0;
+
+    const browser = await launchBrowser(this.env);
+
+    try {
+      const page = await browser.newPage();
+      await page.setUserAgent(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      );
+      await page.setViewport({ width: 1280, height: 900 });
+
+      // t.me/s is Telegram's official embed widget — loads messages via JS
+      await page.goto(`https://t.me/s/${handle}`, {
+        waitUntil: 'networkidle0',
+        timeout: 25000,
+      });
+
+      // Wait for message elements to appear
+      await page.waitForSelector(
+        '.tgme_widget_message, .tgme_channel_info',
+        { timeout: 10000 }
+      ).catch(() => {});
+
+      const messages = await page.evaluate((sinceIdVal: number) => {
+        function parseKM(raw: string): number {
+          const s = raw.trim().toUpperCase();
+          if (s.endsWith('K')) return Math.round(parseFloat(s) * 1_000);
+          if (s.endsWith('M')) return Math.round(parseFloat(s) * 1_000_000);
+          return parseInt(s.replace(/[^\d]/g, ''), 10) || 0;
+        }
+
+        const results: Array<{
+          id: number;
+          text: string;
+          isoDate: string | null;
+          timestampMs: number | null;
+          views: number;
+          reactions: number;
+          hasMedia: boolean;
+          url: string;
+        }> = [];
+
+        document.querySelectorAll<HTMLElement>('.tgme_widget_message').forEach(el => {
+          // Extract message ID from data-post="channelname/123"
+          const dataPost = el.getAttribute('data-post') ?? '';
+          const id = Number(dataPost.split('/')[1] ?? 0);
+          if (!id || id <= sinceIdVal) return;
+
+          // Text
+          const textEl = el.querySelector<HTMLElement>('.tgme_widget_message_text');
+          const text = textEl?.innerText?.trim() ?? '';
+
+          // Timestamp
+          const timeEl = el.querySelector<HTMLElement>('time[datetime]');
+          const isoDate = timeEl?.getAttribute('datetime') ?? null;
+          const timestampMs = isoDate ? new Date(isoDate).getTime() : null;
+
+          // Views — "1.2K", "10.5K", "1M"
+          const viewsEl = el.querySelector<HTMLElement>('.tgme_widget_message_views');
+          const views = parseKM(viewsEl?.textContent ?? viewsEl?.innerText ?? '0');
+
+          // Reactions — <div class="tgme_widget_message_reactions">
+          //   <span class="tgme_reaction"><i class="emoji"><b>👍</b></i>6</span>
+          let reactions = 0;
+          el.querySelectorAll<HTMLElement>('.tgme_reaction').forEach(span => {
+            const emojiText = span.querySelector<HTMLElement>('b')?.textContent ?? '';
+            const countText = (span.textContent ?? '').replace(emojiText, '').trim();
+            reactions += parseKM(countText);
+          });
+
+          // Media
+          const hasMedia = !!(
+            el.querySelector('.tgme_widget_message_photo_wrap') ||
+            el.querySelector('.tgme_widget_message_video_wrap') ||
+            el.querySelector('.tgme_widget_message_document_wrap') ||
+            el.querySelector('.tgme_widget_message_sticker_wrap')
+          );
+
+          // Post URL
+          const linkEl = el.querySelector<HTMLAnchorElement>('a.tgme_widget_message_date');
+          const url = linkEl?.href ?? '';
+
+          results.push({ id, text, isoDate, timestampMs, views, reactions, hasMedia, url });
+        });
+
+        return results;
+      }, sinceId);
+
+      if (!messages || messages.length === 0) {
+        // Check if the channel exists at all
+        const pageTitle = await page.title();
+        if (pageTitle.toLowerCase().includes('404') || pageTitle.toLowerCase().includes('not found')) {
+          throw new Error(`Channel @${handle} not found or is private`);
+        }
+        // Empty channel or no new posts since cursor
+        return { rawItems: [], newCursor: sinceCursor };
+      }
+
+      const rawItems: RawItem[] = [];
+      let latestId: string | null = null;
+
+      // Sort newest first
+      const sorted = [...messages].sort((a, b) => b.id - a.id);
+
+      for (const msg of sorted) {
+        if (rawItems.length >= this.maxResults()) break;
+        if (msg.timestampMs && msg.timestampMs < cutoffMs) continue;
+
+        if (!latestId) latestId = String(msg.id);
+
+        rawItems.push({
+          url: msg.url || `https://t.me/${handle}/${msg.id}`,
+          title: null,
+          textContent: msg.text || null,
+          publishTime: msg.isoDate,
+          contentType: 'message',
+          authorName: handle,
+          hasMedia: msg.hasMedia,
+          engagementSnapshot: { views: msg.views, reactions: msg.reactions },
+          rawData: { id: msg.id, handle },
+        });
+      }
+
+      return { rawItems, newCursor: latestId ?? sinceCursor };
+
+    } finally {
+      await browser.close();
+    }
+  }
 }

@@ -10,7 +10,7 @@ import { runSourcePipeline } from '../pipeline/runner';
 import { jsonParse } from '../db';
 
 const CONNECTOR_TYPES = [
-  'rss', 'website', 'youtube', 'x_twitter', 'x_rss', 'x_browser', 'telegram',
+  'rss', 'website', 'youtube', 'x_browser', 'telegram',
   'facebook_page', 'instagram_pro', 'facebook_profile_watch', 'tiktok_watch', 'threads_watch',
 ];
 const SOURCE_MODES = ['official_api', 'rss', 'website_parse', 'manual_watch', 'provider_api'];

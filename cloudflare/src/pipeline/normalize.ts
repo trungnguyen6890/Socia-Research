@@ -16,7 +16,6 @@ function canonicalizeUrl(url: string): string {
       if (trackingParams.has(key.toLowerCase())) u.searchParams.delete(key);
     }
     u.hash = '';
-    // Remove trailing slash from path (except root)
     if (u.pathname.length > 1 && u.pathname.endsWith('/')) {
       u.pathname = u.pathname.slice(0, -1);
     }
@@ -30,6 +29,31 @@ async function contentHash(text: string): Promise<string> {
   const normalized = text.trim().toLowerCase().replace(/\s+/g, ' ');
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(normalized));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function detectLanguage(text: string): string {
+  if (!text || text.length < 10) return 'unknown';
+  if (/[àáâãèéêìíòóôõùúăđơưạảấầẩẫậắặẵẻẽếềệỉịọỏốồổỗộớờởỡợụủứừửữựỳỷỹ]/i.test(text)) return 'vi';
+  if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
+  if (/[\u3040-\u30ff]/.test(text)) return 'ja';
+  if (/[\uac00-\ud7af]/.test(text)) return 'ko';
+  if (/[\u0600-\u06ff]/.test(text)) return 'ar';
+  if (/[\u0400-\u04ff]/.test(text)) return 'ru';
+  return 'en';
+}
+
+function contentTypeFromConnector(connectorType: string): string {
+  if (connectorType === 'x_browser') return 'tweet';
+  if (connectorType === 'youtube') return 'video';
+  if (connectorType === 'tiktok_watch') return 'video';
+  if (['facebook_page', 'facebook_browser', 'facebook_profile_watch', 'instagram_pro', 'threads_watch'].includes(connectorType)) return 'post';
+  if (connectorType === 'telegram') return 'message';
+  return 'article';
+}
+
+function checkTruncated(text: string | null): boolean {
+  if (!text) return false;
+  return text.endsWith('…') || text.endsWith('...');
 }
 
 export async function normalizeItem(raw: RawItem, source: SourceRow): Promise<NormalizedItem> {
@@ -54,5 +78,10 @@ export async function normalizeItem(raw: RawItem, source: SourceRow): Promise<No
     quality_score: 0,
     signal_score: 0,
     raw_data: raw.rawData ? jsonStringify(raw.rawData) : null,
+    content_type: raw.contentType ?? contentTypeFromConnector(source.connector_type),
+    language: detectLanguage(text),
+    author_name: raw.authorName ?? null,
+    has_media: raw.hasMedia ?? false,
+    is_truncated: checkTruncated(text || null),
   };
 }

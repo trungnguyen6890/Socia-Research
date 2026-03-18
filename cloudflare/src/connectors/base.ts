@@ -43,7 +43,7 @@ export abstract class BaseConnector {
 
   protected maxRateLimit(): number {
     const limits: Record<string, number> = {
-      rss: 60, website: 10, youtube: 90, x_twitter: 15,
+      rss: 60, website: 10, youtube: 90,
       telegram: 30, facebook_page: 200, instagram_pro: 200,
     };
     return limits[this.source.connector_type] ?? 30;

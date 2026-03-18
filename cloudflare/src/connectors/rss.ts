@@ -34,11 +34,15 @@ export class RSSConnector extends BaseConnector {
       const content = this.extractTag(block, 'content:encoded') ?? this.extractTag(block, 'content');
       const published = this.extractTag(block, isAtom ? 'published' : 'pubDate');
 
+      const author = this.extractTag(block, 'author') ?? this.extractTag(block, 'dc:creator');
       rawItems.push({
         url: link,
         title: this.stripCdata(title),
         textContent: this.stripCdata(content ?? summary),
         publishTime: published ?? null,
+        contentType: 'article',
+        authorName: author ? this.stripCdata(author) : null,
+        hasMedia: false,
         rawData: { id, title, link, summary, published },
       });
     }
