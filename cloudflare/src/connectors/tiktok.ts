@@ -150,9 +150,19 @@ export class TikTokConnector extends BaseConnector {
       );
       if (hasCaptcha) throw new Error(`TikTok showed CAPTCHA for @${username}`);
 
-      // Scroll 3× to trigger progressive video list API calls (returns ~35 videos each)
-      for (let i = 0; i < 3; i++) {
-        await page.evaluate(() => window.scrollBy(0, 1200));
+      // Scroll 5× to trigger progressive video list API calls.
+      // TikTok uses a virtual scroll container so window.scrollY stays 0 —
+      // videos load via IntersectionObserver/timer, not window scroll position.
+      // Scroll all common containers to ensure the trigger fires.
+      for (let i = 0; i < 5; i++) {
+        await page.evaluate(() => {
+          window.scrollBy(0, 1200);
+          document.documentElement.scrollTop += 1200;
+          document.body.scrollTop += 1200;
+          // Also scroll TikTok's inner scroll container if present
+          const scroller = document.querySelector('[class*="DivVideoFeedV2"], [class*="DivUserPostList"], main');
+          if (scroller) (scroller as HTMLElement).scrollTop += 1200;
+        });
         await new Promise(r => setTimeout(r, 2500));
       }
 
