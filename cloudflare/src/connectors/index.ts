@@ -4,11 +4,8 @@ import { RSSConnector } from './rss';
 import { WebsiteConnector } from './website';
 import { YouTubeConnector } from './youtube';
 import { TelegramConnector } from './telegram';
-import { FacebookPageConnector } from './facebook_page';
 import { InstagramProConnector } from './instagram_pro';
 import { XBrowserConnector } from './x_browser';
-import { FacebookBrowserConnector } from './facebook_browser';
-import { TikTokConnector } from './tiktok';
 
 type ConnectorClass = new (source: SourceRow, env: Env) => BaseConnector;
 
@@ -18,10 +15,7 @@ const REGISTRY: Record<string, ConnectorClass> = {
   youtube: YouTubeConnector,
   x_browser: XBrowserConnector,
   telegram: TelegramConnector,
-  facebook_page: FacebookPageConnector,
-  facebook_browser: FacebookBrowserConnector,
   instagram_pro: InstagramProConnector,
-  tiktok: TikTokConnector,
 };
 
 export function getConnector(source: SourceRow, env: Env): BaseConnector {

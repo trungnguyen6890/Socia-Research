@@ -8,8 +8,6 @@ export interface Env {
   YOUTUBE_API_KEY?: string;
   X_BEARER_TOKEN?: string;
   TELEGRAM_BOT_TOKEN?: string;
-  FB_ACCESS_TOKEN?: string;
-  FB_COOKIES?: string;
   IG_ACCESS_TOKEN?: string;
 }
 
@@ -21,12 +19,7 @@ export type ConnectorType =
   | 'youtube'
   | 'x_browser'
   | 'telegram'
-  | 'facebook_page'
-  | 'facebook_browser'
   | 'instagram_pro'
-  | 'tiktok'
-  | 'facebook_profile_watch'
-  | 'tiktok_watch'
   | 'threads_watch';
 
 export type SourceMode =
@@ -39,8 +32,6 @@ export type SourceMode =
 export type MatchMode = 'exact' | 'contains' | 'regex';
 
 export const WATCH_ONLY: Set<ConnectorType> = new Set([
-  'facebook_profile_watch',
-  'tiktok_watch',
   'threads_watch',
 ]);
 

@@ -14,10 +14,8 @@ import { detectSource } from '../detect';
 const PLATFORM_MAP: Record<string, string> = {
   x_browser: 'twitter',
   youtube: 'youtube',
-  facebook_page: 'facebook', facebook_browser: 'facebook', facebook_profile_watch: 'facebook',
   instagram_pro: 'instagram',
   telegram: 'telegram',
-  tiktok_watch: 'tiktok',
   threads_watch: 'threads',
   rss: 'rss',
   website: 'website',

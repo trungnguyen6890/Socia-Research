@@ -76,21 +76,9 @@ function detectByPattern(input: string): DetectResult | null {
   const tgMatch = input.match(/(?:t\.me|telegram\.me)\/@?([\w]+)/i);
   if (tgMatch) return hi('telegram', `@${tgMatch[1]}`, 'website_parse', {}, 'Telegram channel — CF Browser Rendering');
 
-  // Facebook
-  if (/facebook\.com\//.test(input)) {
-    const slug = input.match(/facebook\.com\/([^/?#\s]+)/i)?.[1];
-    const handle = slug ? `https://facebook.com/${slug}` : input;
-    return hi('facebook_browser', handle, 'website_parse', {}, 'Facebook — CF Browser Rendering');
-  }
-
   // Instagram
   const igMatch = input.match(/instagram\.com\/@?([\w.]+)/i);
   if (igMatch) return hi('instagram_pro', igMatch[1], 'provider_api', {}, 'Instagram — requires IG_ACCESS_TOKEN');
-
-  // TikTok
-  const ttMatch = input.match(/tiktok\.com\/@?([^/?#\s]+)/i);
-  if (ttMatch) return hi('tiktok', `@${ttMatch[1].replace(/^@/, '')}`, 'website_parse', {}, 'TikTok — HTTP SSR fetch + CF Browser fallback');
-  if (/tiktok\.com/i.test(input)) return hi('tiktok', input, 'website_parse', {}, 'TikTok — HTTP SSR fetch + CF Browser fallback');
 
   // Threads — watch-only
   if (/threads\.net\//i.test(input)) {

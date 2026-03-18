@@ -57,8 +57,7 @@ function detectLanguage(text: string): string {
 function contentTypeFromConnector(connectorType: string): string {
   if (connectorType === 'x_browser') return 'tweet';
   if (connectorType === 'youtube') return 'video';
-  if (connectorType === 'tiktok_watch') return 'video';
-  if (['facebook_page', 'facebook_browser', 'facebook_profile_watch', 'instagram_pro', 'threads_watch'].includes(connectorType)) return 'post';
+  if (['instagram_pro', 'threads_watch'].includes(connectorType)) return 'post';
   if (connectorType === 'telegram') return 'message';
   return 'article';
 }
